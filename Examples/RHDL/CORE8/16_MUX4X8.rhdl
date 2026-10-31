@@ -1,0 +1,7 @@
+# 8-bit 4:1 multiplexer from three Mux2x8. S1 S0 = 00 -> A, 01 -> B,
+# 10 -> C, 11 -> D.
+chip Mux4x8
+    in A: 8, B: 8, C: 8, D: 8, S0, S1
+    out Y: 8
+
+    Y = Mux2x8(Mux2x8(D, C, S0), Mux2x8(B, A, S0), S1)

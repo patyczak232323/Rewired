@@ -1,0 +1,16 @@
+# 3-bit step counter: which step (T0..T7) of an instruction the core is in.
+# On a rising CLK edge it counts up, goes back to 0 when RESET or CLEAR is 1
+# (CLEAR ends the instruction) and stays put while HOLD is 1 (HLT).
+chip StepCounter
+    in CLEAR, HOLD, RESET, CLK
+    out S0, S1, S2
+
+    i0, c0 = HalfAdder(S0, 1)
+    i1, c1 = HalfAdder(S1, c0)
+    i2, _ = HalfAdder(S2, c1)
+
+    count = Not(HOLD)
+    zero = Or(RESET, CLEAR)
+    S0 = Bit(i0, count, zero, CLK)
+    S1 = Bit(i1, count, zero, CLK)
+    S2 = Bit(i2, count, zero, CLK)

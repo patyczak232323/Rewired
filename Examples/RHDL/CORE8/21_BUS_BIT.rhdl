@@ -1,0 +1,11 @@
+# One bit of a shared bus: four 3-state buffers drive the same wire.
+# Only the source whose enable is 1 puts its bit on the bus; with every
+# enable at 0 the bus floats. Never enable two sources at once.
+chip BusBit
+    in D0, D1, D2, D3, E0, E1, E2, E3
+    out Y
+
+    Y = TRISTATE(D0, E0)
+    Y = TRISTATE(D1, E1)
+    Y = TRISTATE(D2, E2)
+    Y = TRISTATE(D3, E3)

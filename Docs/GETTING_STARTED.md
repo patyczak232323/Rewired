@@ -111,7 +111,7 @@ It has:
 
 See `Examples/RHDL/CPU4/README.md` for the ISA and a test ROM program.
 
-For a bigger processor, open the **CPU8** project that comes with Rewired: an 8-bit single-cycle CPU with 32 instructions, eight registers and 256 bytes of RAM, built the way you would build it by hand, from NOT, AND, OR and XOR chips up to the ALU and the control unit. `Examples/RHDL/CPU8/README.md` describes it.
+For a bigger processor, open the **CPU8** project that comes with Rewired: an 8-bit single-cycle CPU with 32 instructions, eight registers and 256 bytes of RAM, built the way you would build it by hand, from NOT, AND, OR and XOR chips up to the ALU and the control unit. `Examples/RHDL/CPU8/README.md` describes it. The **Core8** project is a processor core alone, built from NAND gates up with a 3-state bus and no memory inside, ready for you to connect your own ROM and RAM; see `Examples/RHDL/CORE8/README.md`.
 
 ## 7. Debug larger circuits
 

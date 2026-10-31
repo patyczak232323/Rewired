@@ -1,0 +1,7 @@
+# Half adder: adds two bits.
+chip HalfAdder
+    in A, B
+    out S, C
+
+    S = Xor(A, B)
+    C = And(A, B)
