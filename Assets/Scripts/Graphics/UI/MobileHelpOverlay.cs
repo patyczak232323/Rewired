@@ -13,7 +13,7 @@ namespace DLS.Graphics
 		static readonly (string title, string text)[] Steps =
 		{
 			("ADD PARTS", "Drag a part from PARTS onto the board, or tap it and then tap the board."),
-			("CONNECT", "Tap a pin, then another pin. Tap empty space on the way to bend the wire."),
+			("CONNECT", "Drag from one pin to another, or tap both pins. Tap empty space on the way to bend."),
 			("TRY IT", "Tap the round button of an input to switch it on and off."),
 			("CHANGE", "Tap a part to select it: its actions appear below. Drag a part to move it."),
 			("LOOK AROUND", "Drag empty space to move, pinch or + and - to zoom. FIT shows everything."),

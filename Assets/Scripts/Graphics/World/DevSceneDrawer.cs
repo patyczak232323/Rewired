@@ -43,6 +43,44 @@ namespace DLS.Graphics
 			viewCullBounds = new Bounds2D(centre - halfSize, centre + halfSize);
 		}
 
+		// Touch: a fingertip is several times wider than a pin, so on the touch interface a touch
+		// that lands just outside a part (or on a wire) goes to the nearest pin within reach.
+		// Inside a part's body the touch still moves the part, except while a wire is being
+		// connected, when the nearest pin it can connect to is what the finger is after.
+		const float TouchPinReachInches = 0.14f;
+		static float touchPinReach;
+		static PinInstance touchPinCandidate;
+		static float touchPinCandidateDst;
+		static PinInstance touchSnappedPin;
+
+		static float CalculateTouchPinReach()
+		{
+			if (!MobileUI.IsActive || InteractionState.MouseIsOverUI || !controller.CanInteractWithPin || Screen.height <= 0) return 0;
+			if (controller.IsMovingSelection || controller.IsCreatingSelectionBox || controller.IsPlacingElements) return 0;
+			float dpi = Screen.dpi > 0 ? Screen.dpi : 320f;
+			float reachPixels = Mathf.Clamp(dpi * TouchPinReachInches, 28f, 90f);
+			return reachPixels * InputHelper.WorldCam.orthographicSize * 2f / Screen.height;
+		}
+
+		// Distance from the finger to the edge of the pin; 0 when it is on the pin.
+		static void ConsiderPinForTouch(PinInstance pin, float distance)
+		{
+			if (touchPinReach <= 0 || distance >= touchPinReach || distance >= touchPinCandidateDst) return;
+			if (controller.IsCreatingWire && !controller.CanCompleteWireConnection(pin)) return;
+			touchPinCandidate = pin;
+			touchPinCandidateDst = distance;
+		}
+
+		static void ApplyTouchPinSnap()
+		{
+			if (touchPinCandidate == null || InteractionState.PinUnderMouse != null) return;
+			IInteractable under = InteractionState.ElementUnderMouse;
+			bool replace = under is null or WireInstance || (controller.IsCreatingWire && under is IMoveable);
+			if (!replace) return;
+			InteractionState.NotifyElementUnderMouse(touchPinCandidate);
+			touchSnappedPin = touchPinCandidate;
+		}
+
 		static bool IsElementVisible(IMoveable element) => element.SelectionBoundingBox.Overlaps(viewCullBounds);
 
 		static bool IsWireVisible(WireInstance wire)
@@ -73,6 +111,10 @@ namespace DLS.Graphics
 			controller = Project.ActiveProject.controller;
 			canEditViewedChip = Project.ActiveProject.CanEditViewedChip;
 			UpdateViewCullBounds();
+			touchPinReach = CalculateTouchPinReach();
+			touchPinCandidate = null;
+			touchPinCandidateDst = float.MaxValue;
+			touchSnappedPin = null;
 
 			DrawWires();
 			DrawWireEditPoints(controller.wireToEdit);
@@ -87,6 +129,8 @@ namespace DLS.Graphics
 			DrawMoveableElements(true);
 
 			if (!controller.IsMovingSelection) DrawAllPinNamesAndChipLabels();
+
+			ApplyTouchPinSnap();
 
 			if (InteractionState.PinUnderMouse != null && controller.HasControl && !controller.IsMovingSelection && !controller.IsCreatingSelectionBox)
 			{
@@ -954,6 +998,8 @@ namespace DLS.Graphics
 			bool mouseOverPin = !InteractionState.MouseIsOverUI && InputHelper.MouseInsidePoint_World(pinSelectionBoundsPos, pinSelectionBoundsRadius);
 
 			if (mouseOverPin) InteractionState.NotifyElementUnderMouse(pin);
+			else if (touchPinReach > 0) ConsiderPinForTouch(pin, Mathf.Max(0, Vector2.Distance(InputHelper.MousePosWorld, pinPos) - PinRadius));
+			mouseOverPin |= pin == touchSnappedPin;
 			bool canInteract = controller.CanInteractWithPin;
 
 			Color pinCol = mouseOverPin && canInteract ? ActiveTheme.PinHighlightCol : ActiveTheme.PinCol;
@@ -977,6 +1023,13 @@ namespace DLS.Graphics
 			bool mouseOverPin = !InteractionState.MouseIsOverUI && InputHelper.MouseInsideBounds_World(pinSelectionBoundsPos, pinSize);
 
 			if (mouseOverPin) InteractionState.NotifyElementUnderMouse(pin);
+			else if (touchPinReach > 0)
+			{
+				Vector2 offset = InputHelper.MousePosWorld - pinPos;
+				Vector2 outside = new(Mathf.Max(0, Mathf.Abs(offset.x) - pinSize.x / 2), Mathf.Max(0, Mathf.Abs(offset.y) - pinSize.y / 2));
+				ConsiderPinForTouch(pin, outside.magnitude);
+			}
+			mouseOverPin |= pin == touchSnappedPin;
 			bool canInteract = controller.CanInteractWithPin;
 
 			Color pinCol = mouseOverPin && canInteract ? ActiveTheme.PinHighlightCol : ActiveTheme.PinCol;

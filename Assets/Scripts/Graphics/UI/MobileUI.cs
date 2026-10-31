@@ -490,7 +490,7 @@ namespace DLS.Graphics
 
 			if (controller.IsCreatingWire)
 			{
-				text = "TAP A PIN TO CONNECT  •  TAP EMPTY SPACE TO BEND";
+				text = "TAP OR DRAG TO A PIN  •  TAP EMPTY SPACE TO BEND";
 				buttonA = "UNDO BEND";
 				actionA = controller.RemoveLastWirePoint;
 				buttonB = "CANCEL";
@@ -600,7 +600,7 @@ namespace DLS.Graphics
 			{
 				("1", "Drag IN-1 from PARTS onto the board, twice"),
 				("2", "Open BASIC and drag a NAND, then add an OUT-1"),
-				("3", "Tap a pin, then another pin, to wire them"),
+				("3", "Drag from one pin to another to wire them"),
 				("4", "Tap an input's round button to switch it on")
 			};
 

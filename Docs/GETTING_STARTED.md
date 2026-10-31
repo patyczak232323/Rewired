@@ -130,7 +130,7 @@ For difficult circuits, use the simulation diagnostics and profiling tools descr
 The screen has three parts: the top bar, the *PARTS* panel on the left and the board.
 
 - **Add parts**: drag a part from *PARTS* onto the board, or tap it and then tap the board. The panel's left column picks a category; *MY CHIPS* lists the chips you have saved, and *FIND* searches every chip by name.
-- **Wire**: tap a pin, then another pin. Tapping empty space on the way adds a bend; the banner at the top has *UNDO BEND* and *CANCEL*.
+- **Wire**: drag from one pin to another, or tap a pin and then another pin. A touch just next to a pin counts as a touch on it, so pins do not have to be hit exactly. Tapping empty space on the way adds a bend; the banner at the top has *UNDO BEND* and *CANCEL*.
 - **Try it**: tap the round button of an input to switch it on and off.
 - **Change**: tap a part to select it. Its actions (*LOOK INSIDE*, *TRUTH TABLE*, *LABEL*, *FLIP*, *COPY*, *DELETE*, *MORE*) appear at the bottom of the board. Drag a part to move it.
 - **Move around**: drag empty space to move the view, pinch to zoom. The buttons on the right fit the whole chip on screen, switch on area selection (drag a box round several parts), and zoom in and out.
