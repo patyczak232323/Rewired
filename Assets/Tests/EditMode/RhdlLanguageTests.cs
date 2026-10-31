@@ -631,10 +631,10 @@ circuit Mix(A: u4, B: u4, S) -> (Y: u4, LOW: u4, R: u4, W: u8):
 			StringAssert.Contains("for i in 0..WIDTH - 1", upgraded);
 			StringAssert.Contains("join(A, B)[0..1]", upgraded);
 
-			string before = Newtonsoft.Json.JsonConvert.SerializeObject(RhdlCompiler.Compile(Version1Source, library).Description);
+			string before = Serializer.SerializeChipDescription(RhdlCompiler.Compile(Version1Source, library).Description);
 			RhdlCompileResult after = RhdlCompiler.Compile(upgraded, library);
 			Assert.IsTrue(after.Success, upgraded + "\n" + string.Join("\n", after.Diagnostics.Select(d => d.ToString())));
-			Assert.AreEqual(before, Newtonsoft.Json.JsonConvert.SerializeObject(after.Description), upgraded);
+			Assert.AreEqual(before, Serializer.SerializeChipDescription(after.Description), upgraded);
 		}
 
 		// ---- Sources that must not take the editor down ----
