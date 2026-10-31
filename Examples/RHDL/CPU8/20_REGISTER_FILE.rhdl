@@ -3,10 +3,10 @@
 #     (combinational, through two Mux8x8)
 #   - on a rising CLK edge, WD is written into register WA when WE=1
 #   - RESET writes 0 into all eight registers on the next rising edge
-circuit RegisterFile(WD: u8, WA: u4, WE, RA: u4, RB: u4, CLK, RESET) -> (
-    A: u8, B: u8,
-    R0: u8, R1: u8, R2: u8, R3: u8, R4: u8, R5: u8, R6: u8, R7: u8,
-):
+chip RegisterFile
+    in WD: 8, WA: 4, WE, RA: 4, RB: 4, CLK, RESET
+    out A: 8, B: 8, R0: 8, R1: 8, R2: 8, R3: 8, R4: 8, R5: 8, R6: 8, R7: 8
+
     w = Dec3(WA[0], WA[1], WA[2], WE)
     d = Mux2x8(0, WD, RESET)
     R0 = Register8(d, Or(w.Y0, RESET), CLK)

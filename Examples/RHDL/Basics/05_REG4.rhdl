@@ -1,6 +1,10 @@
 # 4-bit rising-edge register built from four DffBit instances.
 # RESET is synchronous: it clears the register on the next rising CLK edge.
-circuit Reg4(D: u4, WE, CLK, RESET) -> Q: u4:
-    for i in range(4):
-        d = 0 if RESET else (D[i] if WE else Q[i])
+chip Reg4
+    in D: 4, WE, CLK, RESET
+    out Q: 4
+
+    for i in 0..3
+        d = if RESET then 0 else if WE then D[i] else Q[i]
         Q[i], _ = DffBit(d, CLK)
+    end

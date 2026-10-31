@@ -1,4 +1,7 @@
 # 4-bit 2:1 multiplexer.
 # SEL=1 selects A, SEL=0 selects B.
-circuit Mux4(A: u4, B: u4, SEL) -> Y: u4:
-    Y = A if SEL else B
+chip Mux4
+    in A: 4, B: 4, SEL
+    out Y: 4
+
+    Y = if SEL then A else B

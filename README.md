@@ -26,13 +26,13 @@ Free and open source · Windows · Linux · Android · MIT licence
 <p align="center"><img src="Docs/images/snake-pix6.png" alt="Rewired running the bundled Snake project: the PIX6 processor drives a 64 by 64 colour screen, with W A S D keys, a clock and a power-on reset wired to it" width="900"></p>
 <p align="center"><i>The Snake project that ships with Rewired: a small processor made of logic gates, a 64×64 screen and four keys.</i></p>
 
-**Rewired** is a free, open-source **digital logic simulator** and **logic gate circuit simulator** for learning **digital electronics**, **Boolean logic** and **computer architecture**. Start with a single NAND gate, build your own chips, and keep going until you have an ALU, registers, RAM and a working CPU. Rewired is a desktop and Android app built with Unity, with a deterministic, JIT-accelerated simulation engine and **RHDL**, a small **hardware description language** with Python syntax that turns source code into gate-level circuits.
+**Rewired** is a free, open-source **digital logic simulator** and **logic gate circuit simulator** for learning **digital electronics**, **Boolean logic** and **computer architecture**. Start with a single NAND gate, build your own chips, and keep going until you have an ALU, registers, RAM and a working CPU. Rewired is a desktop and Android app built with Unity, with a deterministic, JIT-accelerated simulation engine and **RHDL**, a small **hardware description language** in plain words that turns source code into gate-level circuits.
 
 Rewired is based on Sebastian Lague's [Digital Logic Sim](https://github.com/SebLague/Digital-Logic-Sim), but uses its own simulation engine and should be treated as an independent simulator rather than a drop-in compatible replacement.
 
 ## Screenshots
 
-| Write hardware in Python syntax… | …and get a real gate-level circuit |
+| Describe hardware in a few plain lines… | …and get a real gate-level circuit |
 |---|---|
 | <img src="Docs/images/rhdl-studio.png" alt="RHDL Studio: an 8-bit ALU written in RHDL, with the compiler status and a quick reference" width="440"> | <img src="Docs/images/rhdl-generated-alu.png" alt="The ALU from RHDL Studio built as a circuit of NAND gates in the editor" width="440"> |
 
@@ -77,7 +77,7 @@ The repository includes a compact example progression ending with a **4-bit CPU*
 - simulation diagnostics and profiling
 - waveform capture and deterministic replay
 - non-convergence diagnostics
-- **RHDL 1.0** hardware description language with Python syntax
+- **RHDL 2.0** hardware description language in plain words (`chip`, `in`, `out`, `and`, `or`, `if ... then ... else`)
 - truth table for any combinational chip, recordable as a regression test
 - breakpoints: pause when a pin changes, rises, falls or reaches a value
 - export to structural Verilog, SVG schematics and PNG screenshots
@@ -119,23 +119,26 @@ For a first project, see **[Getting Started](Docs/GETTING_STARTED.md)**.
 
 ## RHDL — hardware description language
 
-Rewired includes **RHDL Studio**, a source-driven circuit generator. RHDL uses Python syntax to describe hardware and builds an ordinary Rewired chip from NAND gates and your other chips; it does not use a separate simulation runtime.
+Rewired includes **RHDL Studio**, a source-driven circuit generator. RHDL describes hardware in a few plain lines and builds an ordinary Rewired chip from NAND gates and your other chips; it does not use a separate simulation runtime.
 
 Example:
 
-```python
-circuit FullAdder(A, B, CIN) -> (SUM, COUT):
-    ab = A ^ B
-    SUM = ab ^ CIN
-    COUT = (A & B) | (CIN & ab)
+```text
+chip FullAdder
+    in A, B, CIN
+    out SUM, COUT
+
+    ab = A xor B
+    SUM = ab xor CIN
+    COUT = (A and B) or (CIN and ab)
 ```
 
 RHDL supports:
 
-- Python operators: `& | ^ ~`, `+ -`, comparisons, `<< >>`, and `and`/`or`/`not` on bits
-- `a if select else b` multiplexing
-- bit indexing and Python slices (`A[0:4]`), `cat(...)` and `u8(...)` width changes
-- `for i in range(n):` loops and variables that build chains such as ripple-carry adders
+- logic in words: `and`, `or`, `xor`, `not`, `nand`, `nor`, `xnor`, plus `+ -`, comparisons and `<< >>`
+- `if select then a else b` multiplexing
+- bits and ranges (`A[3]`, `A[0..3]`) and `join(...)` to build buses
+- `for i in 0..7` ... `end` loops and variables that build chains such as ripple-carry adders
 - calling other chips like functions, with tuple unpacking (`q, nq = DffBit(d, clk)`)
 - feedback and memory: a name can be used above the line that assigns it
 - constant folding, shared gates and readable left-to-right schematics

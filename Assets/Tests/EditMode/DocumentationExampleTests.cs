@@ -12,11 +12,11 @@ namespace DLS.Tests
 {
 	// Compiles every complete RHDL circuit shown in the Markdown documentation, so a syntax
 	// change cannot leave README.md, Docs/ or the example READMEs describing code that no
-	// longer builds. Fragments (code blocks without a "circuit Name(" header) are skipped.
+	// longer builds. Fragments (code blocks without a "chip Name" line) are skipped.
 	public class DocumentationExampleTests
 	{
 		static readonly Regex CodeBlock = new(@"^```[^\n]*\n(.*?)^```", RegexOptions.Singleline | RegexOptions.Multiline);
-		static readonly Regex CircuitHeader = new(@"^circuit \w+\(", RegexOptions.Multiline);
+		static readonly Regex CircuitHeader = new(@"^chip \w+", RegexOptions.Multiline);
 
 		static string RepositoryRoot => Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 

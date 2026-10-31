@@ -1,3 +1,6 @@
 # Minimal two-input AND gate.
-circuit And2(A, B) -> Y:
-    Y = A & B
+chip And2
+    in A, B
+    out Y
+
+    Y = A and B

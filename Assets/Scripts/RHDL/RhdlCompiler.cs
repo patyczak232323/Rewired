@@ -99,8 +99,8 @@ namespace DLS.RHDL
 				diagnostics.Add(new RhdlDiagnostic(e.Line, e.Column, e.Message));
 				if (LooksLikeVersion06(source))
 				{
-					diagnostics.Add(new RhdlDiagnostic(0, "This source uses the RHDL 0.6 syntax. RHDL 1.0 uses Python syntax: " +
-					                                      "see 'Coming from RHDL 0.6' in Docs/RHDL_GUIDE.md."));
+					diagnostics.Add(new RhdlDiagnostic(0, "This source uses the RHDL 0.6 syntax. " +
+					                                      "See 'Coming from RHDL 0.6' in Docs/RHDL_GUIDE.md for the changes."));
 				}
 
 				return new RhdlCompileResult(null, diagnostics);
@@ -108,14 +108,14 @@ namespace DLS.RHDL
 
 			if (module.Circuits.Count == 0)
 			{
-				diagnostics.Add(new RhdlDiagnostic(1, "No circuit found. Start with a line such as 'circuit Name(A, B) -> Y:'."));
+				diagnostics.Add(new RhdlDiagnostic(1, "No chip found. Start with a line such as 'chip Adder'."));
 				return new RhdlCompileResult(null, diagnostics);
 			}
 
 			if (module.Circuits.Count > 1)
 			{
 				CircuitSyntax second = module.Circuits[1];
-				diagnostics.Add(new RhdlDiagnostic(second.Line, second.Column, "Write one circuit per source. Build this one first, then use it by name from the next."));
+				diagnostics.Add(new RhdlDiagnostic(second.Line, second.Column, "Write one chip per source. Build this one first, then use it by name from the next."));
 				return new RhdlCompileResult(null, diagnostics);
 			}
 
@@ -175,10 +175,14 @@ namespace DLS.RHDL
 		}
 
 		static readonly System.Text.RegularExpressions.Regex Version06Line = new(
-			@"^\s*(input|output|signal|constant|component|connect)\s|^\s*end\s*$",
+			@"^\s*(input|output|signal|constant|component|connect)\s",
 			System.Text.RegularExpressions.RegexOptions.Multiline);
 
-		static bool LooksLikeVersion06(string source) => Version06Line.IsMatch(source ?? string.Empty);
+		static readonly System.Text.RegularExpressions.Regex Version06Header = new(
+			@"^\s*circuit\s+\w+\s*$",
+			System.Text.RegularExpressions.RegexOptions.Multiline);
+
+		static bool LooksLikeVersion06(string source) => Version06Header.IsMatch(source ?? string.Empty) && Version06Line.IsMatch(source);
 
 		// Turns the bit netlist into chip parts and wires: multi-bit pins are split into bits
 		// or merged from bits only where the logic needs single bits.

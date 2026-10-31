@@ -53,12 +53,17 @@ namespace DLS.Graphics
 			if (string.IsNullOrWhiteSpace(source)) source = RhdlSourceStore.LoadDraft(project.description.ProjectName);
 			bool loadedTemplate = string.IsNullOrWhiteSpace(source);
 			if (loadedTemplate) source = StarterTemplate;
+
+			// Sources saved with the RHDL 1.0 syntax open converted to RHDL 2.0.
+			bool upgraded = !loadedTemplate && RhdlUpgrade.IsLegacySource(source) && RhdlUpgrade.TryUpgrade(source, out source, out _);
 			requestedSourceChipName = null;
 			SetEditorSource(source);
-			if (loadedTemplate) CodeEditor.MarkDirty();
+			if (loadedTemplate || upgraded) CodeEditor.MarkDirty();
 			statusText = loadedTemplate
-				? "New RHDL circuit template. Rename it and start coding."
-				: "Ready. Edit source and press BUILD.";
+				? "New chip template. Rename it and start writing."
+				: upgraded
+					? "This source was written for RHDL 1.0 and has been converted to RHDL 2.0. BUILD saves the new version."
+					: "Ready. Edit the source and press BUILD.";
 			statusSuccess = false;
 			buildAttempted = false;
 			latestResult = null;
@@ -90,7 +95,7 @@ namespace DLS.Graphics
 				topLeft,
 				WorkspaceWidth,
 				true,
-				"RHDL 1.0  /  HARDWARE IN PYTHON SYNTAX");
+				"RHDL 2.0  /  CHIPS IN PLAIN WORDS");
 
 			Vector2 contentTop = mainHeader.BottomLeft + Vector2.down * 0.7f;
 			Vector2 sourceTop = contentTop;
@@ -141,7 +146,7 @@ namespace DLS.Graphics
 
 			Vector2 actionsTopLeft = sourceCard.BottomLeft + Vector2.down * 0.7f;
 			// One row under both columns, so the right column cannot run into it
-			string[] actionNames = { "SAVE DRAFT", "BUILD", "BUILD & OPEN", "NEW CIRCUIT", "LOAD EXAMPLE", "CLOSE" };
+			string[] actionNames = { "SAVE DRAFT", "BUILD", "BUILD & OPEN", "NEW CHIP", "LOAD EXAMPLE", "CLOSE" };
 			int action = UI.HorizontalButtonGroup(
 				actionNames,
 				theme.MainMenuButtonTheme,
@@ -187,7 +192,7 @@ namespace DLS.Graphics
 			latestResult = null;
 			buildAttempted = false;
 			statusSuccess = false;
-			statusText = "New circuit template loaded.";
+			statusText = "New chip template loaded.";
 		}
 
 		static void LoadExample()
@@ -397,14 +402,16 @@ namespace DLS.Graphics
 			y -= 2.4f;
 
 			string help =
-				"circuit Adder(A: u8, B: u8) -> Y: u8:\n" +
+				"chip Adder\n" +
+				"    in A: 8, B: 8\n" +
+				"    out Y: 8\n" +
 				"    Y = A + B\n\n" +
-				"sum = A + B    wide: u9 = A + B    WIDTH = 8\n" +
-				"& | ^ ~    and / or / not on bits\n" +
-				"A if sel else B    cat(A[4:8], B[0:4])\n" +
+				"and  or  xor  not  nand  nor  xnor\n" +
+				"Y = if S then A else B    wire t: 9 = A + B\n" +
+				"A[3]  A[0..3]  join(high, low)    const N = 8\n" +
 				"y = NAND(a, b)    q, nq = DffBit(d, clk)\n" +
-				"for i in range(4):    # comment\n\n" +
-				"TAB indent    UNDO/REDO on keyboard    BUILD above";
+				"for i in 0..7 ... end    # comment\n\n" +
+				"UNDO/REDO on keyboard    BUILD above";
 			UI.DrawText(
 				help,
 				theme.FontRegular,
@@ -418,7 +425,7 @@ namespace DLS.Graphics
 			float buttonW = (innerW - buttonGap) / 2f;
 			Vector2 buttons = new(card.Left + 0.8f, card.Bottom + 0.8f);
 			if (UI.Button(
-				"NEW CIRCUIT",
+				"NEW CHIP",
 				theme.MenuButtonTheme,
 				buttons,
 				new Vector2(buttonW, buttonH),
@@ -433,7 +440,7 @@ namespace DLS.Graphics
 				latestResult = null;
 				buildAttempted = false;
 				statusSuccess = false;
-				statusText = "New circuit template loaded.";
+				statusText = "New chip template loaded.";
 				mobileInfoOpen = false;
 			}
 			if (UI.Button(
@@ -491,7 +498,7 @@ namespace DLS.Graphics
 			string summary = statusText;
 			if (statusSuccess && latestResult?.Description != null)
 			{
-				summary += $"\n\ncircuit: {latestResult.Description.Name}" +
+				summary += $"\n\nchip: {latestResult.Description.Name}" +
 				           $"\ncomponents: {lastBuildSubChipCount}" +
 				           $"\nconnections: {lastBuildWireCount}";
 			}
@@ -505,24 +512,26 @@ namespace DLS.Graphics
 				statusCol);
 
 			cursor = statusCard.BottomLeft + Vector2.down * 0.6f;
-			Bounds2D syntaxHeader = RewiredUI.DrawSectionHeader("RHDL 1.0 QUICK REFERENCE", cursor, RightWidth);
+			Bounds2D syntaxHeader = RewiredUI.DrawSectionHeader("RHDL 2.0 QUICK REFERENCE", cursor, RightWidth);
 			cursor = syntaxHeader.BottomLeft;
 
 			RewiredUI.DrawCard(cursor, new Vector2(RightWidth, Mathf.Max(4f, cursor.y - bottom)));
 			Bounds2D syntaxCard = UI.PrevBounds;
 			string help =
-				"circuit Adder(A: u8, B: u8) -> Y: u8:\n" +
+				"chip Adder\n" +
+				"    in A: 8, B: 8\n" +
+				"    out Y: 8\n" +
 				"    Y = A + B\n\n" +
-				"Signal: sum = A + B   or   wide: u9 = A + B\n" +
-				"Constant (top of file): WIDTH = 8\n" +
-				"Logic: & | ^ ~   (and / or / not on single bits)\n" +
-				"Choice: A if select else B\n" +
-				"Bits: A[0], A[0:4], A[-1], cat(high, low), u8(x)\n" +
-				"Loop: for i in range(4):\n" +
+				"Wire: t = A and B   or   wire t: 9 = A + B\n" +
+				"Logic: and  or  xor  not  nand  nor  xnor\n" +
+				"Choice: Y = if S then A else B\n" +
+				"Bits: A[3], A[0..3], join(high, low)\n" +
+				"Repeat: for i in 0..7  ...  end\n" +
+				"Constant: const WIDTH = 8\n" +
 				"Chip: y = NAND(a, b)   s, c = HalfAdder(a, b)\n" +
 				"Feedback: use a name above the line that sets it\n" +
 				"Comments start with #\n\n" +
-				"ENTER after a line ending in : indents automatically\n" +
+				"ENTER after chip or for indents automatically\n" +
 				"TAB / SHIFT+TAB indent   ALT+UP/DOWN move lines\n" +
 				"CTRL+BACKSPACE/DELETE delete word\n" +
 				"CTRL+Z/Y undo/redo   CTRL+/ comment\n" +
@@ -600,7 +609,7 @@ namespace DLS.Graphics
 
 			lastBuildSubChipCount = description.SubChips?.Length ?? 0;
 			lastBuildWireCount = description.Wires?.Length ?? 0;
-			statusText = existed ? "Rebuilt existing RHDL circuit." : "Generated and saved new RHDL circuit.";
+			statusText = existed ? "Rebuilt the existing chip." : "Built and saved a new chip.";
 			statusSuccess = true;
 			CodeEditor.SetDiagnosticLines(Array.Empty<int>());
 			CodeEditor.MarkSaved();
@@ -634,20 +643,26 @@ namespace DLS.Graphics
 		static void SetEditorSource(string source) => CodeEditor.SetText(source);
 
 		public const string StarterTemplate =
-@"# Smallest useful RHDL circuit.
-circuit Adder(A: u8, B: u8) -> Y: u8:
+@"# A small chip: name it, list its pins, give each output a value.
+chip Adder
+    in A: 8, B: 8
+    out Y: 8
+
     Y = A + B
 ";
 
 		public const string DefaultExample =
-@"# RHDL 1.0: Python syntax, but every line is hardware that runs at once.
-circuit AluMini(A: u8, B: u8, select) -> (Y: u8, equal, carry):
-    wide: u9 = A + B
-    mixed = cat(A[4:8], B[0:4])
+@"# Every line is hardware, and all of it works at the same time.
+chip AluMini
+    in A: 8, B: 8, select
+    out Y: 8, equal, carry
 
-    Y = wide[0:8] if select else mixed
+    wire total: 9 = A + B
+    mixed = join(A[4..7], B[0..3])
+
+    Y = if select then total[0..7] else mixed
     equal = A == B
-    carry = wide[8]
+    carry = total[8]
 ";
 
 	}

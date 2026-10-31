@@ -5,7 +5,7 @@ Documentation for **Rewired**, the digital logic simulator, circuit editor and R
 ## Start here
 
 - **[Getting Started](GETTING_STARTED.md)** — download, launch and build a first circuit.
-- **[RHDL Guide](RHDL_GUIDE.md)** — RHDL 1.0: Python-style syntax and how circuits are generated.
+- **[RHDL Guide](RHDL_GUIDE.md)** — RHDL 2.0: describing chips in plain words, and how they are generated.
 - **[Examples](../Examples/RHDL/README.md)** — small circuits, RAM4x4, CPU4, PIX6 and CPU8.
 
 ## Simulation engine

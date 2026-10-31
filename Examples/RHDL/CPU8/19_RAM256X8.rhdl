@@ -1,8 +1,11 @@
 # 256 x 8-bit RAM: sixteen Ram16x8 banks. The high four address bits choose
 # the bank (Dec4 for writing, Mux16x8 for reading), the low four the word.
-circuit Ram256x8(D: u8, A: u8, WE, CLK) -> Q: u8:
-    word = A[0:4]
-    bank = A[4:8]
+chip Ram256x8
+    in D: 8, A: 8, WE, CLK
+    out Q: 8
+
+    word = A[0..3]
+    bank = A[4..7]
     w = Dec4(bank, WE)
     b0 = Ram16x8(D, word, w.Y0, CLK)
     b1 = Ram16x8(D, word, w.Y1, CLK)

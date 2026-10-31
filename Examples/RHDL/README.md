@@ -1,6 +1,6 @@
 # RHDL examples
 
-This is the small curated RHDL example set for RHDL 1.0 (Python-style syntax).
+This is the small curated RHDL example set, written in RHDL 2.0 (see [the RHDL guide](../../Docs/RHDL_GUIDE.md)).
 
 Build them in this order:
 

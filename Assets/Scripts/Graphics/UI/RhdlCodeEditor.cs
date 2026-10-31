@@ -1,4 +1,5 @@
 using System;
+using DLS.RHDL;
 using System.Collections.Generic;
 using Seb.Helpers;
 using Seb.Helpers.InputHandling;
@@ -32,8 +33,8 @@ namespace DLS.Graphics
 
 		static readonly HashSet<string> SyntaxKeywords = new(StringComparer.Ordinal)
 		{
-			"circuit", "for", "in", "range", "if", "else", "and", "or", "not", "pass",
-			"cat", "True", "False", "bit", "u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u16"
+			"chip", "in", "out", "wire", "const", "for", "step", "end", "if", "then", "else",
+			"and", "or", "xor", "not", "nand", "nor", "xnor", "join", "true", "false"
 		};
 
 		readonly UIHandle scrollID = new("RHDL_DocumentScroll");
@@ -838,10 +839,131 @@ namespace DLS.Graphics
 			Touch();
 		}
 
-		// Indentation is part of the syntax, so formatting keeps the block structure and only
-		// rewrites each level as four spaces, turns tabs into spaces and trims line ends.
-		// Lines continued inside brackets keep their indentation relative to the line above.
+		// RHDL 2.0 ignores indentation, so formatting works it out from the words: the lines
+		// of a chip sit one level in, the lines between 'for' and 'end' one more, and a line
+		// that continues the one above one more again. Comments take the level of the code
+		// below them.
 		void FormatDocument()
+		{
+			if (RhdlUpgrade.IsLegacySource(text))
+			{
+				FormatLegacyDocument();
+				return;
+			}
+
+			EnsureLineCache();
+			int oldLine = FindLineForIndex(caret);
+			int oldColumn = caret - lineStarts[oldLine];
+			string[] work = new string[lines.Length];
+			int[] codeLevel = new int[lines.Length];
+			bool[] isCode = new bool[lines.Length];
+			int level = 0;
+			int depth = 0;
+			string previousCode = string.Empty;
+
+			for (int i = 0; i < lines.Length; i++)
+			{
+				string trimmed = lines[i].Replace("\t", Indent).Trim();
+				string code = StripEditorComment(trimmed).Trim();
+				work[i] = trimmed;
+				if (code.Length == 0) continue;
+
+				string first = FirstWord(code);
+				bool continued = depth > 0 || EndsWithContinuation(previousCode) || ContinuationWords.Contains(first) || code[0] is '+' or '-' or '&' or '|' or '^';
+				int lineLevel;
+				if (continued)
+				{
+					lineLevel = depth > 0 && code[0] is ')' or ']' ? level : level + 1;
+				}
+				else if (first == "chip")
+				{
+					lineLevel = 0;
+					level = 1;
+				}
+				else if (first == "end")
+				{
+					level = Math.Max(0, level - 1);
+					lineLevel = level;
+				}
+				else
+				{
+					lineLevel = level;
+					if (first == "for") level++;
+				}
+
+				isCode[i] = true;
+				codeLevel[i] = lineLevel;
+				foreach (char c in code)
+				{
+					if (c is '(' or '[') depth++;
+					else if (c is ')' or ']') depth = Math.Max(0, depth - 1);
+				}
+
+				previousCode = code;
+			}
+
+			// Comments and code lines get their indentation; a comment uses the next code line's.
+			int nextLevel = 0;
+			for (int i = lines.Length - 1; i >= 0; i--)
+			{
+				if (work[i].Length == 0) continue;
+				if (isCode[i]) nextLevel = codeLevel[i];
+				work[i] = new string(' ', (isCode[i] ? codeLevel[i] : nextLevel) * Indent.Length) + work[i];
+			}
+
+			ApplyFormatted(string.Join("\n", work), oldLine, oldColumn);
+		}
+
+		static readonly HashSet<string> ContinuationWords = new(StringComparer.Ordinal)
+		{
+			"then", "else", "and", "or", "xor", "nand", "nor", "xnor"
+		};
+
+		static readonly string[] ContinuationEndings =
+		{
+			"=", ",", "+", "-", "&", "|", "^", "~", "<", ">", "..", " and", " or", " xor", " nand", " nor", " xnor", " not",
+			" then", " else", "(", "["
+		};
+
+		static bool EndsWithContinuation(string code)
+		{
+			if (code.Length == 0) return false;
+			foreach (string ending in ContinuationEndings)
+			{
+				if (code.EndsWith(ending, StringComparison.Ordinal)) return true;
+			}
+
+			return code is "if" or "else" or "then";
+		}
+
+		static string FirstWord(string code)
+		{
+			int end = 0;
+			while (end < code.Length && (char.IsLetterOrDigit(code[end]) || code[end] == '_')) end++;
+			return code.Substring(0, end);
+		}
+
+		void ApplyFormatted(string formatted, int oldLine, int oldColumn)
+		{
+			if (formatted == text) return;
+
+			CaptureUndo();
+			text = formatted;
+			cacheDirty = true;
+			EnsureLineCache();
+
+			int line = Mathf.Clamp(oldLine, 0, lines.Length - 1);
+			int column = Mathf.Clamp(oldColumn, 0, lines[line].Length);
+			caret = lineStarts[line] + column;
+			anchor = caret;
+			preferredColumn = -1;
+			Touch();
+		}
+
+		// RHDL 1.0: indentation is part of the syntax, so formatting keeps the block structure
+		// and only rewrites each level as four spaces, turns tabs into spaces and trims line
+		// ends. Lines continued inside brackets keep their indentation relative to the line above.
+		void FormatLegacyDocument()
 		{
 			EnsureLineCache();
 			int oldLine = FindLineForIndex(caret);
@@ -903,20 +1025,7 @@ namespace DLS.Graphics
 				}
 			}
 
-			string formatted = string.Join("\n", work);
-			if (formatted == text) return;
-
-			CaptureUndo();
-			text = formatted;
-			cacheDirty = true;
-			EnsureLineCache();
-
-			int line = Mathf.Clamp(oldLine, 0, lines.Length - 1);
-			int column = Mathf.Clamp(oldColumn, 0, lines[line].Length);
-			caret = lineStarts[line] + column;
-			anchor = caret;
-			preferredColumn = -1;
-			Touch();
+			ApplyFormatted(string.Join("\n", work), oldLine, oldColumn);
 		}
 
 		// The block level of a line indented by width spaces, updating the stack of open
@@ -1015,10 +1124,34 @@ namespace DLS.Graphics
 				else if (c is ')' or ']') open--;
 			}
 
-			if (codeBeforeCaret.EndsWith(":") || open > 0)
+			string first = FirstWord(codeBeforeCaret);
+			if (first == "chip" && !HasSelection)
+			{
+				// The lines of a chip sit one level in.
+				indent = Indent;
+			}
+			else if (first == "end" && !HasSelection && codeBeforeCaret == StripEditorComment(line).Trim())
+			{
+				// 'end' closes a block: it moves back one level, and so does the next line.
+				string reduced = indent.Length >= Indent.Length ? indent.Substring(Indent.Length) : string.Empty;
+				if (reduced != indent)
+				{
+					int lineStart = lineStarts[lineIndex];
+					int caretFromEnd = line.Length - column;
+					ReplaceRange(lineStart, lineStart + indent.Length, reduced);
+					EnsureLineCache();
+					SetCaret(lineStarts[lineIndex] + lines[lineIndex].Length - caretFromEnd, false);
+					indent = reduced;
+				}
+			}
+			else if (first == "for" || codeBeforeCaret.EndsWith(":") || open > 0 || EndsWithContinuation(codeBeforeCaret))
+			{
 				indent += Indent;
+			}
 			else if (codeBeforeCaret == "pass")
+			{
 				indent = indent.Length >= Indent.Length ? indent.Substring(Indent.Length) : string.Empty;
+			}
 
 			ReplaceSelection("\n" + indent);
 		}

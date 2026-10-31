@@ -193,7 +193,9 @@ namespace DLS.RHDL
 
 			if (circuit.Outputs.Count == 0)
 			{
-				Error(circuit, $"'{circuit.Name}' has no outputs. Add them after '->', e.g. 'circuit {circuit.Name}(A, B) -> Y:'.");
+				Error(circuit, Legacy
+					? $"'{circuit.Name}' has no outputs. Add them after '->', e.g. 'circuit {circuit.Name}(A, B) -> Y:'."
+					: $"'{circuit.Name}' has no outputs. Add a line such as 'out Y'.");
 			}
 		}
 
@@ -202,8 +204,8 @@ namespace DLS.RHDL
 			int width = port.Width == 0 ? 1 : port.Width;
 			if (width != 1 && width != 4 && width != 8)
 			{
-				Error(port, $"Pin '{port.Name}' is {width} bits, but chip pins can only be 1, 4 or 8 bits wide (bit, u4 or u8). " +
-				            "Use several pins, or a wider signal inside the circuit.");
+				Error(port, $"Pin '{port.Name}' is {width} bits, but chip pins can only be 1, 4 or 8 bits wide. " +
+				            "Use several pins, or a wider wire inside the chip.");
 				return;
 			}
 
@@ -272,8 +274,15 @@ namespace DLS.RHDL
 					if (loop.Step != null && !TryConstant(loop.Step, rangeWork, out step)) continue;
 					if (step == 0)
 					{
-						Error(loop.Step, "range() step cannot be zero.");
+						Error(loop.Step, Legacy ? "range() step cannot be zero." : "'step' cannot be zero.");
 						continue;
+					}
+
+					if (loop.Inclusive)
+					{
+						// 'for i in 0..3' includes 3, and 'for i in 3..0' counts down.
+						step = Math.Abs(step) * (stop < start ? -1 : 1);
+						stop += step > 0 ? 1 : -1;
 					}
 
 					for (long i = start; step > 0 ? i < stop : i > stop; i += step)
@@ -580,7 +589,7 @@ namespace DLS.RHDL
 				{
 					if (slice.Target is not NameExpr sliceName || Lookup(sliceName.Name, work) is not SignalSymbol signal)
 					{
-						Error(target, "Only bits of a pin or a declared signal can be assigned, e.g. 'Y[0:4] = ...'.");
+						Error(target, $"Only bits of a pin or a declared wire can be assigned, e.g. 'Y{Bits(0, 3)} = ...'.");
 						return -1;
 					}
 
@@ -596,7 +605,7 @@ namespace DLS.RHDL
 				}
 
 				default:
-					Error(target, "Only names, bits such as Y[0], slices such as Y[0:4] and component pins such as reg.D can be assigned.");
+					Error(target, $"Only names, bits such as Y[0] or Y{Bits(0, 3)} and chip pins such as reg.D can be assigned.");
 					return -1;
 			}
 		}
@@ -691,7 +700,7 @@ namespace DLS.RHDL
 				{
 					if (slice.Target is not NameExpr sliceName || Lookup(sliceName.Name, work) is not SignalSymbol signal)
 					{
-						Error(target, "Only bits of an output or a declared signal can be assigned, e.g. 'Y[0:4] = ...'.");
+						Error(target, $"Only bits of an output or a declared wire can be assigned, e.g. 'Y{Bits(0, 3)} = ...'.");
 						return;
 					}
 
@@ -703,7 +712,7 @@ namespace DLS.RHDL
 					}
 
 					if (!TryResolveSlice(slice, work, signal.Width, out int low, out int high)) return;
-					Net[] bits = MaterializeForTarget(value, high - low, assign.Value, $"{signal.Name}[{low}:{high}]");
+					Net[] bits = MaterializeForTarget(value, high - low, assign.Value, $"{signal.Name}{Bits(low, high - 1)}");
 					if (bits == null) return;
 					BindBits(signal, bits, low, assign);
 					return;
@@ -767,17 +776,11 @@ namespace DLS.RHDL
 			if (value.IsConstant) return ConstantBits(value.Constant, width, at);
 			if (width == 0 || value.Width == width) return value.Bits;
 
-			if (value.Width < width)
-			{
-				Error(at, $"This value is {value.Width} bit{(value.Width == 1 ? "" : "s")} but '{targetName}' is {width}. " +
-				          $"Write u{width}(...) to add zero bits at the top.");
-			}
-			else
-			{
-				Error(at, $"This value is {value.Width} bits but '{targetName}' is {width}. " +
-				          $"Take the bits you need with a slice such as [0:{width}].");
-			}
+			// A narrower value fills the top bits with 0.
+			if (value.Width < width) return Resize(value.Bits, width);
 
+			Error(at, $"This value is {value.Width} bits but '{targetName}' is {width}. " +
+			          $"Take the bits you need, e.g. [{(Legacy ? $"0:{width}" : $"0..{width - 1}")}].");
 			return null;
 		}
 
@@ -1095,7 +1098,7 @@ namespace DLS.RHDL
 				{
 					if (call.Function is NameExpr function)
 					{
-						if (function.Name == "cat") return call.Arguments.Sum(a => InferWidth(a.Value, work));
+						if (IsJoin(function.Name)) return call.Arguments.Sum(a => InferWidth(a.Value, work));
 						if (RhdlParser.TryParseTypeName(function.Name, out int castWidth)) return castWidth;
 						if (TryResolveComponent(call, work, out ChipDescription component, report: false) && component.OutputPins.Length > 0)
 						{
@@ -1147,7 +1150,14 @@ namespace DLS.RHDL
 			return width;
 		}
 
-		static bool IsBuiltinFunction(string name) => name == "cat" || name == "True" || name == "False" || RhdlParser.TryParseTypeName(name, out _);
+		static bool IsJoin(string name) => name is "join" or "cat";
+
+		// How a range of bits is written: Y[0..3], or Y[0:4] in RHDL 1.0.
+		string Bits(int low, int high) => Legacy ? $"[{low}:{high + 1}]" : $"[{low}..{high}]";
+
+		bool Legacy => circuit?.Legacy == true;
+
+		static bool IsBuiltinFunction(string name) => IsJoin(name) || name == "True" || name == "False" || RhdlParser.TryParseTypeName(name, out _);
 
 		// ---- Constants ----
 
@@ -1242,7 +1252,7 @@ namespace DLS.RHDL
 					return SynthesizeConditional(conditional, work, contextWidth, constantOnly);
 
 				case ListExpr list:
-					Error(list, "Lists are not values. Join bits into a bus with cat(high, ..., low).");
+					Error(list, "Lists are not values. Join bits into a bus with join(high, ..., low).");
 					return Value.Const(0);
 			}
 
@@ -1331,7 +1341,7 @@ namespace DLS.RHDL
 					if (!assignedAbove || !variable.HasValue)
 					{
 						Error(name, $"'{name.Name}' is used before it is assigned. Names that are assigned more than once " +
-						            "are read in order, like Python variables.");
+						            "are read from top to bottom.");
 						return Value.Of(new[] { netlist.Const0 });
 					}
 
@@ -1382,15 +1392,16 @@ namespace DLS.RHDL
 		{
 			if (call.Function is not NameExpr function)
 			{
-				Error(call, "Only components and the built-ins cat() and uN() can be called.");
+				Error(call, "Only chips and join() can be called.");
 				return Value.Const(0);
 			}
 
-			if (function.Name == "cat")
+			if (IsJoin(function.Name))
 			{
+				string join = function.Name;
 				if (call.Arguments.Count == 0)
 				{
-					Error(call, "cat() needs at least one value: cat(high, ..., low).");
+					Error(call, $"{join}() needs at least one value: {join}(high, ..., low).");
 					return Value.Const(0);
 				}
 
@@ -1399,14 +1410,14 @@ namespace DLS.RHDL
 				for (int i = call.Arguments.Count - 1; i >= 0; i--)
 				{
 					CallArgument argument = call.Arguments[i];
-					if (argument.Keyword != null) Error(argument.Line, argument.Column, "cat() takes values only, without names.");
+					if (argument.Keyword != null) Error(argument.Line, argument.Column, $"{join}() takes values only, without names.");
 					Value value = Synthesize(argument.Value, work, 0);
 					if (value.IsConstant)
 					{
 						int spelled = argument.Value is NumberExpr n ? n.SpelledWidth : 0;
 						if (spelled == 0)
 						{
-							Error(argument.Value, "Give each constant in cat() a width, e.g. 0b0000 or u4(0).");
+							Error(argument.Value, $"Give each number in {join}() a width by writing it in binary, e.g. 0b0000 for four 0 bits.");
 							continue;
 						}
 
@@ -1513,7 +1524,7 @@ namespace DLS.RHDL
 			{
 				if (width == 0)
 				{
-					Error(unary, "~ on a number needs a width. Write the inverted number directly, or ~u4(5).");
+					Error(unary, "Inverting a plain number needs a width. Write the inverted number directly, or in binary such as 0b0101.");
 					return Value.Const(0);
 				}
 
@@ -1733,13 +1744,16 @@ namespace DLS.RHDL
 		{
 			if (value.IsConstant || value.Width == 1) return true;
 			Error(at, op == "if"
-				? $"The choice in 'a if select else b' must be a single bit, but this is {value.Width} bits."
+				? (Legacy
+					? $"The choice in 'a if select else b' must be a single bit, but this is {value.Width} bits."
+					: $"The condition in 'if ... then ... else' must be a single bit, but this is {value.Width} bits. Compare it, e.g. 'if OP == 2 then ...'.")
 				: $"'{op}' works on single bits, but this is {value.Width} bits. Use {(op == "not" ? "~" : op == "and" ? "&" : "|")} for every bit of a bus.");
 			return false;
 		}
 
 		bool TryResolveSlice(SliceExpr slice, Work work, int width, out int low, out int high, bool report = true)
 		{
+			if (slice.Inclusive) return TryResolveBitRange(slice, work, width, out low, out high, report);
 			low = 0;
 			high = width;
 			if (slice.Low != null)
@@ -1765,6 +1779,34 @@ namespace DLS.RHDL
 				return false;
 			}
 
+			return true;
+		}
+
+		// A[0..3]: both ends are included and may come in either order. An end left out is the
+		// lowest or the highest bit. 'high' is returned one past the last bit, like a 1.0 slice.
+		bool TryResolveBitRange(SliceExpr slice, Work work, int width, out int low, out int high, bool report)
+		{
+			low = 0;
+			high = width;
+			long first = 0, last = width - 1;
+			if (slice.Low != null && !(report ? TryConstant(slice.Low, work, out first) : TryQuietConstant(slice.Low, work, out first))) return false;
+			if (slice.High != null && !(report ? TryConstant(slice.High, work, out last) : TryQuietConstant(slice.High, work, out last))) return false;
+			if (first < 0) first += width;
+			if (last < 0) last += width;
+			if (first > last) (first, last) = (last, first);
+
+			if (first < 0 || last >= width)
+			{
+				if (report)
+				{
+					Error(slice, $"Bits {first}..{last} do not exist in this {width}-bit value; its bits are 0..{width - 1}.");
+				}
+
+				return false;
+			}
+
+			low = (int)first;
+			high = (int)last + 1;
 			return true;
 		}
 

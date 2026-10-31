@@ -1,4 +1,7 @@
 # XOR gate: the classic four-NAND circuit.
-circuit Xor(A, B) -> Y:
+chip Xor
+    in A, B
+    out Y
+
     n = NAND(A, B)
     Y = NAND(NAND(A, n), NAND(B, n))
