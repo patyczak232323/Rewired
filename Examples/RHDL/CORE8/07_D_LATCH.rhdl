@@ -1,0 +1,10 @@
+# Gated D latch: Q follows D while EN=1 and keeps its value while EN=0.
+# Q and NQ are used before they are assigned: that feedback stores the bit.
+chip DLatch
+    in D, EN
+    out Q, NQ
+
+    set_n = NAND(D, EN)
+    reset_n = NAND(Not(D), EN)
+    Q = NAND(set_n, NQ)
+    NQ = NAND(reset_n, Q)

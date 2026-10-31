@@ -1,0 +1,9 @@
+# Rising-edge D flip-flop: two D latches, master and slave.
+# The master follows D while CLK is low; when CLK rises it closes and the
+# slave opens, so Q takes the value D had just before the edge.
+chip Dff
+    in D, CLK
+    out Q
+
+    master, _ = DLatch(D, Not(CLK))
+    Q, _ = DLatch(master, CLK)

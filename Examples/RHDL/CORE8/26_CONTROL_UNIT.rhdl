@@ -1,0 +1,60 @@
+# Control unit: turns the opcode and the step into the control lines.
+# A Dec4 gives one line per instruction, a Dec3 one line per step; every
+# control line is an OR of (step AND instruction) terms.
+#
+#   0 NOP    4 ADD a   8 XOR a   C JZ a
+#   1 LDI n  5 SUB a   9 ADI n   D JNZ a
+#   2 LDA a  6 AND a   A CPI n   E JC a
+#   3 STA a  7 OR a    B JMP a   F HLT
+#
+# Every instruction starts with the same two steps (fetch):
+#   T0  PC -> bus -> MAR                 the address of the opcode
+#   T1  memory -> bus -> IR, PC + 1      the opcode
+# Two-byte instructions then read their operand byte:
+#   T2  PC -> bus -> MAR
+#   T3  memory -> bus -> A (LDI), B (ADI, CPI), MAR (LDA .. XOR) or PC (taken jump); PC + 1
+# and finish:
+#   T4  LDA: memory -> A        STA: A -> bus -> memory
+#       ADD .. XOR: memory -> B ADI: ALU -> A, flags     CPI: flags only
+#   T5  ADD .. XOR: ALU -> A, flags
+chip ControlUnit
+    in OP: 4, S0, S1, S2, ZF, CF
+    out PC_OUT, MEM_RD, A_OUT, ALU_OUT, MAR_IN, IR_IN, A_IN, B_IN, PC_INC, PC_LOAD
+    out FLAGS_IN, MEM_WE, SUB, L0, L1, END, HALT
+
+    nop, ldi, lda, sta, add, sub, and_op, or_op, xor_op, adi, cpi, jmp, jz, jnz, jc, hlt = Dec4(OP[0], OP[1], OP[2], OP[3], 1)
+    t0, t1, t2, t3, t4, t5, _, _ = Dec3(S0, S1, S2, 1)
+
+    # Groups of instructions.
+    imm = Or(ldi, Or(adi, cpi))
+    alu_mem = Or(Or4(add, sub, and_op, or_op), xor_op)
+    mem = Or4(lda, sta, alu_mem, 0)
+    jump = Or4(jmp, jz, jnz, jc)
+    two_byte = Or4(imm, mem, jump, 0)
+    taken = Or4(jmp, And(jz, ZF), And(jnz, Not(ZF)), And(jc, CF))
+
+    # Steps that read the operand byte.
+    t2_operand = And(t2, two_byte)
+    t3_read = And(t3, Or4(imm, mem, And(jump, taken), 0))
+
+    PC_OUT = Or(t0, t2_operand)
+    MAR_IN = Or4(t0, t2_operand, And(t3, mem), 0)
+    MEM_RD = Or4(t1, t3_read, And(t4, Or(lda, alu_mem)), 0)
+    IR_IN = t1
+    PC_INC = Or4(t1, And(t3, imm), And(t3, mem), And(t3, And(jump, Not(taken))))
+    PC_LOAD = And(t3, And(jump, taken))
+
+    A_IN = Or4(And(t3, ldi), And(t4, Or(lda, adi)), And(t5, alu_mem), 0)
+    B_IN = Or(And(t3, Or(adi, cpi)), And(t4, alu_mem))
+    A_OUT = And(t4, sta)
+    MEM_WE = And(t4, sta)
+    ALU_OUT = Or(And(t4, adi), And(t5, alu_mem))
+    FLAGS_IN = Or(And(t4, Or(adi, cpi)), And(t5, alu_mem))
+
+    # ALU operation: SUB and CPI subtract; AND, OR and XOR pick the logic result.
+    SUB = Or(sub, cpi)
+    L0 = Or(and_op, xor_op)
+    L1 = Or(or_op, xor_op)
+
+    END = Or4(And(t2, nop), And(t3, Or(ldi, jump)), And(t4, Or4(lda, sta, adi, cpi)), t5)
+    HALT = And(t2, hlt)

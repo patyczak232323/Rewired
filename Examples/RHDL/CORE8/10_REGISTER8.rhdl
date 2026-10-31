@@ -1,0 +1,8 @@
+# 8-bit register: eight Bit chips sharing LOAD, RESET and CLK.
+chip Register8
+    in D: 8, LOAD, RESET, CLK
+    out Q: 8
+
+    for i in 0..7
+        Q[i] = Bit(D[i], LOAD, RESET, CLK)
+    end

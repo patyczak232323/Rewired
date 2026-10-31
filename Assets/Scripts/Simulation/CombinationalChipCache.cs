@@ -1247,7 +1247,8 @@ namespace DLS.Simulation
 			}
 			catch (OperationCanceledException)
 			{
-				AbortBuild("superseded by a newer FULL LUT request");
+				// A newer request for the same chip replaced this one: expected, not an error.
+				AbortBuild("superseded by a newer FULL LUT request", expected: true);
 			}
 			catch (Exception ex)
 			{
@@ -1255,13 +1256,15 @@ namespace DLS.Simulation
 			}
 		}
 
-		void AbortBuild(string reason, Exception ex = null)
+		void AbortBuild(string reason, Exception ex = null, bool expected = false)
 		{
 			buildFailureReason = reason ?? "unknown FULL LUT failure";
 			persistenceMessage = "BUILD ABORTED";
 			lut = null;
 			Volatile.Write(ref buildState, 3);
-			CombinationalChipCacheManager.LogFullLutError($"BUILD ABORTED: chip={chipName} reason={buildFailureReason}", ex);
+			string message = $"BUILD ABORTED: chip={chipName} reason={buildFailureReason}";
+			if (expected) CombinationalChipCacheManager.LogFullLut(message);
+			else CombinationalChipCacheManager.LogFullLutError(message, ex);
 		}
 
 		static SimChip BuildIsolatedSimChip(CombinationalChipCacheManager.CacheBuildSnapshot snapshot)

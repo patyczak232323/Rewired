@@ -1,0 +1,9 @@
+# 1-bit register. On a rising CLK edge:
+#   RESET=1 -> Q becomes 0
+#   LOAD=1  -> Q becomes D
+#   else       Q keeps its value (the multiplexer feeds Q back in)
+chip Bit
+    in D, LOAD, RESET, CLK
+    out Q
+
+    Q = Dff(And(Mux(D, Q, LOAD), Not(RESET)), CLK)

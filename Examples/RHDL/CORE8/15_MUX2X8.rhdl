@@ -1,0 +1,8 @@
+# 8-bit 2:1 multiplexer: eight Mux chips. S=1 selects A, S=0 selects B.
+chip Mux2x8
+    in A: 8, B: 8, S
+    out Y: 8
+
+    for i in 0..7
+        Y[i] = Mux(A[i], B[i], S)
+    end

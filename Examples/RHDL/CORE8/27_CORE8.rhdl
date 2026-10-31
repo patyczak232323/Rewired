@@ -1,0 +1,46 @@
+# Core8: an 8-bit processor core, and nothing else. No ROM, no RAM, no
+# clock: the program and the data live in memory you connect to its pins.
+#
+#   ADDR     out  address of the byte the core wants (from MAR)
+#   DATA_IN  in   the byte at ADDR; the core reads it while RD=1
+#   DATA_OUT out  the byte to write; write it to ADDR on the rising CLK edge
+#                 while WE=1
+#
+# Inside, everything meets on one 8-bit bus made of 3-state buffers. Four
+# sources can drive it (PC, DATA_IN, A, ALU) and five registers can load it
+# (MAR, IR, A, B, PC). The control unit enables one source and the
+# registers that take the value in each step.
+chip Core8
+    in CLK, RESET, DATA_IN: 8
+    out ADDR: 8, DATA_OUT: 8, RD, WE
+    out A: 8, B: 8, PC: 8, IR: 8, BUS: 8, STEP: 4, Z, C, HALTED
+
+    cu = ControlUnit(IR[4..7], step.S0, step.S1, step.S2, Z, C)
+
+    # The bus.
+    bus = Bus8(PC, DATA_IN, A, alu.Y, cu.PC_OUT, cu.MEM_RD, cu.A_OUT, cu.ALU_OUT)
+
+    # Registers on the bus.
+    PC = ProgramCounter(bus, cu.PC_LOAD, cu.PC_INC, RESET, CLK)
+    mar = Register8(bus, cu.MAR_IN, RESET, CLK)
+    IR = Register8(bus, cu.IR_IN, RESET, CLK)
+    A = Register8(bus, cu.A_IN, RESET, CLK)
+    B = Register8(bus, cu.B_IN, RESET, CLK)
+
+    # ALU and flags. The flags load with the ALU result.
+    alu = Alu(A, B, cu.SUB, cu.L0, cu.L1)
+    Z = Bit(alu.Z, cu.FLAGS_IN, RESET, CLK)
+    C = Bit(alu.C, cu.FLAGS_IN, RESET, CLK)
+
+    # Step counter: back to T0 at the end of every instruction, held by HLT.
+    step = StepCounter(cu.END, cu.HALT, RESET, CLK)
+
+    # Memory pins.
+    ADDR = mar
+    DATA_OUT = bus
+    RD = cu.MEM_RD
+    WE = cu.MEM_WE
+
+    BUS = bus
+    STEP = join(0b0, step.S2, step.S1, step.S0)
+    HALTED = cu.HALT

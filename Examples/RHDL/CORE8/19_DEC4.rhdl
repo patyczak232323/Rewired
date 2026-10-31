@@ -1,0 +1,10 @@
+# 4-to-16 decoder: a Dec2 on the top two bits enables one of four Dec2.
+chip Dec4
+    in A0, A1, A2, A3, EN
+    out Y0, Y1, Y2, Y3, Y4, Y5, Y6, Y7, Y8, Y9, Y10, Y11, Y12, Y13, Y14, Y15
+
+    g0, g1, g2, g3 = Dec2(A2, A3, EN)
+    Y0, Y1, Y2, Y3 = Dec2(A0, A1, g0)
+    Y4, Y5, Y6, Y7 = Dec2(A0, A1, g1)
+    Y8, Y9, Y10, Y11 = Dec2(A0, A1, g2)
+    Y12, Y13, Y14, Y15 = Dec2(A0, A1, g3)

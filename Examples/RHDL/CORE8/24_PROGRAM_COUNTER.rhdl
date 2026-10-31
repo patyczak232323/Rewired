@@ -1,0 +1,9 @@
+# 8-bit program counter. On a rising CLK edge:
+#   RESET=1 -> 0
+#   LOAD=1  -> D (a jump)
+#   INC=1   -> PC + 1
+chip ProgramCounter
+    in D: 8, LOAD, INC, RESET, CLK
+    out Q: 8
+
+    Q = Register8(Mux2x8(D, Inc8(Q), LOAD), Or(LOAD, INC), RESET, CLK)
