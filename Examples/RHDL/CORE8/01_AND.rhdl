@@ -1,0 +1,6 @@
+# AND: a NAND followed by a NOT.
+chip And
+    in A, B
+    out Y
+
+    Y = Not(NAND(A, B))

@@ -1,0 +1,7 @@
+# XOR from four NAND gates.
+chip Xor
+    in A, B
+    out Y
+
+    n = NAND(A, B)
+    Y = NAND(NAND(A, n), NAND(B, n))

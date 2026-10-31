@@ -1,0 +1,6 @@
+# 1 when all eight bits are 0.
+chip IsZero8
+    in A: 8
+    out Y
+
+    Y = Not(Or(Or4(A[0], A[1], A[2], A[3]), Or4(A[4], A[5], A[6], A[7])))

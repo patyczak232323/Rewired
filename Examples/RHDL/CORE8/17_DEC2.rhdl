@@ -1,0 +1,11 @@
+# 2-to-4 decoder with enable: exactly one output is 1 while EN=1.
+chip Dec2
+    in A0, A1, EN
+    out Y0, Y1, Y2, Y3
+
+    n0 = Not(A0)
+    n1 = Not(A1)
+    Y0 = And3(n0, n1, EN)
+    Y1 = And3(A0, n1, EN)
+    Y2 = And3(n0, A1, EN)
+    Y3 = And3(A0, A1, EN)

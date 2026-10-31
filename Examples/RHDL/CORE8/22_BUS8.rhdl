@@ -1,0 +1,8 @@
+# 8-bit shared bus with four sources: eight BusBit chips.
+chip Bus8
+    in D0: 8, D1: 8, D2: 8, D3: 8, E0, E1, E2, E3
+    out Y: 8
+
+    for i in 0..7
+        Y[i] = BusBit(D0[i], D1[i], D2[i], D3[i], E0, E1, E2, E3)
+    end

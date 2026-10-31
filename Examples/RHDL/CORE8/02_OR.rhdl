@@ -1,0 +1,6 @@
+# OR: invert both inputs, then NAND them (De Morgan).
+chip Or
+    in A, B
+    out Y
+
+    Y = NAND(Not(A), Not(B))
