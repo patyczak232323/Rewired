@@ -2,17 +2,20 @@
 #
 # Every NAND(...) below is one gate, wired exactly as written. Q and NOT_Q are
 # used before they are assigned: that is the feedback that stores the bit.
-circuit DffBit(D, CLK) -> (Q, NOT_Q):
-    not_clk = ~CLK
+chip DffBit
+    in D, CLK
+    out Q, NOT_Q
+
+    not_clk = not CLK
 
     # Master latch: follows D while CLK is low.
     master_set = NAND(D, not_clk)
-    master_reset = NAND(~D, not_clk)
+    master_reset = NAND(not D, not_clk)
     master_q = NAND(master_set, master_nq)
     master_nq = NAND(master_reset, master_q)
 
     # Slave latch: copies the master while CLK is high.
     slave_set = NAND(master_q, CLK)
-    slave_reset = NAND(~master_q, CLK)
+    slave_reset = NAND(not master_q, CLK)
     Q = NAND(slave_set, NOT_Q)
     NOT_Q = NAND(slave_reset, Q)

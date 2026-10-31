@@ -122,13 +122,19 @@ namespace DLS.Benchmarks
 		public void AluRandomInputs()
 		{
 			Compile(@"
-circuit Alu8(A: u8, B: u8, OP0, OP1) -> (Y: u8, EQ, LT):
-    Y = ((A - B) if OP0 else (A + B)) if OP1 else ((A ^ B) if OP0 else (A & B))
+chip Alu8
+    in A: 8, B: 8, OP0, OP1
+    out Y: 8, EQ, LT
+
+    Y = if OP1 then (if OP0 then A - B else A + B) else if OP0 then A xor B else A and B
     EQ = A == B
     LT = A < B
 ");
 			ChipDescription harness = Compile(@"
-circuit Alu8Harness(A: u8, B: u8, OP0, OP1) -> (Y: u8, EQ, LT):
+chip Alu8Harness
+    in A: 8, B: 8, OP0, OP1
+    out Y: 8, EQ, LT
+
     Y, EQ, LT = Alu8(A, B, OP0, OP1)
 ");
 

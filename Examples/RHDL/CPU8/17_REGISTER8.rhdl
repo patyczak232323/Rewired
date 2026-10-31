@@ -1,5 +1,9 @@
 # 8-bit register: eight D flip-flops. On a rising CLK edge every bit loads
 # D when WE=1; with WE=0 the multiplexer feeds the flip-flop its own output.
-circuit Register8(D: u8, WE, CLK) -> Q: u8:
-    for i in range(8):
+chip Register8
+    in D: 8, WE, CLK
+    out Q: 8
+
+    for i in 0..7
         Q[i], _ = DffBit(Mux(D[i], Q[i], WE), CLK)
+    end

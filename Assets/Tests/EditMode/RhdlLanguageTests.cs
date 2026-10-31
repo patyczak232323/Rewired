@@ -51,14 +51,18 @@ namespace DLS.Tests
 		[Test]
 		public void LoopVariableBuildsARippleCarryAdder()
 		{
-			// 'carry' is assigned in every iteration, so each use reads the value from the
-			// line above it, as in Python.
+			// 'carry' is assigned in every repetition, so each use reads the value from the
+			// line above it.
 			ChipDescription chip = Build(@"
-circuit Add4(A: u4, B: u4, CIN) -> (S: u4, COUT):
+chip Add4
+    in A: 4, B: 4, CIN
+    out S: 4, COUT
+
     carry = CIN
-    for i in range(4):
-        S[i] = A[i] ^ B[i] ^ carry
-        carry = (A[i] & B[i]) | (carry & (A[i] ^ B[i]))
+    for i in 0..3
+        S[i] = A[i] xor B[i] xor carry
+        carry = (A[i] and B[i]) or (carry and (A[i] xor B[i]))
+    end
     COUT = carry
 ");
 			TestCircuit c = new(chip, library);
@@ -81,10 +85,41 @@ circuit Add4(A: u4, B: u4, CIN) -> (S: u4, COUT):
 		}
 
 		[Test]
+		public void LoopsIncludeBothEndsCountDownAndStep()
+		{
+			ChipDescription chip = Build(@"
+chip Loops
+    in A: 8
+    out REV: 8, EVEN: 4
+
+    for i in 7..0
+        REV[7 - i] = A[i]
+    end
+    for i in 0..6 step 2
+        EVEN[i >> 1] = A[i]
+    end
+");
+			TestCircuit c = new(chip, library);
+			for (uint a = 0; a < 256; a += 7)
+			{
+				c.Set("A", a);
+				c.Step();
+				uint reversed = 0, even = 0;
+				for (int i = 0; i < 8; i++) reversed |= ((a >> i) & 1) << (7 - i);
+				for (int i = 0; i < 4; i++) even |= ((a >> (2 * i)) & 1) << i;
+				Assert.AreEqual(reversed, c.Get("REV"), $"REV for {a}");
+				Assert.AreEqual(even, c.Get("EVEN"), $"EVEN for {a}");
+			}
+		}
+
+		[Test]
 		public void NamesUsedAboveTheirAssignmentFormFeedback()
 		{
 			ChipDescription chip = Build(@"
-circuit SrLatch(S_N, R_N) -> (Q, QN):
+chip SrLatch
+    in S_N, R_N
+    out Q, QN
+
     Q = NAND(S_N, QN)
     QN = NAND(R_N, Q)
 ");
@@ -105,36 +140,41 @@ circuit SrLatch(S_N, R_N) -> (Q, QN):
 		}
 
 		[Test]
-		public void OperatorsSlicesAndBuiltinsMatchPythonOnIntegers()
+		public void OperatorsBitsAndJoinWorkOnEveryBit()
 		{
 			ChipDescription chip = Build(@"
-WIDTH = 4
+const WIDTH = 4
 
-circuit Ops(A: u4, B: u4, S) -> (
-    AND_: u4, OR_: u4, XOR_: u4, NOT_: u4, ADD: u4, SUB: u4,
-    SHL: u4, SHR: u4, MUX: u4, CAT: u8, LOW: u4, TOP, WIDE: u8,
-    EQ, NE, LT, GT, LE, GE, LOGIC,
-):
-    AND_ = A & B
-    OR_ = A | B
-    XOR_ = A ^ B
-    NOT_ = ~A
+chip Ops
+    in A: 4, B: 4, S
+    out AND_: 4, OR_: 4, XOR_: 4, NOT_: 4, NAND_: 4, NOR_: 4, XNOR_: 4
+    out ADD: 4, SUB: 4, SHL: 4, SHR: 4, MUX: 4, JOIN: 8, LOW: 4, HIGH: 4, TOP, WIDE: 8
+    out EQ, NE, LT, GT, LE, GE, LOGIC
+
+    AND_ = A and B
+    OR_ = A or B
+    XOR_ = A xor B
+    NOT_ = not A
+    NAND_ = A nand B
+    NOR_ = A nor B
+    XNOR_ = A xnor B
     ADD = A + B
     SUB = A - B
     SHL = A << 1
     SHR = A >> 2
-    MUX = A if S else B
-    CAT = cat(A, B)
-    LOW = cat(B, A)[0:WIDTH]
-    TOP = A[-1]
-    WIDE = u8(A) + u8(B)
+    MUX = if S then A else B
+    JOIN = join(A, B)
+    LOW = join(B, A)[0..WIDTH - 1]
+    HIGH = join(A, B)[7..4]
+    TOP = A[3]
+    WIDE = A + B
     EQ = A == B
     NE = A != B
     LT = A < B
     GT = A > B
     LE = A <= B
     GE = A >= B
-    LOGIC = (A[0] and not B[0]) or S
+    LOGIC = A[0] and not B[0] or S
 ");
 			TestCircuit c = new(chip, library);
 			for (uint a = 0; a < 16; a++)
@@ -147,19 +187,23 @@ circuit Ops(A: u4, B: u4, S) -> (
 					c.Set("S", s);
 					c.Step();
 					string at = $"A={a} B={b} S={s}";
-					Assert.AreEqual(a & b, c.Get("AND_"), "& " + at);
-					Assert.AreEqual(a | b, c.Get("OR_"), "| " + at);
-					Assert.AreEqual(a ^ b, c.Get("XOR_"), "^ " + at);
-					Assert.AreEqual(~a & 15, c.Get("NOT_"), "~ " + at);
+					Assert.AreEqual(a & b, c.Get("AND_"), "and " + at);
+					Assert.AreEqual(a | b, c.Get("OR_"), "or " + at);
+					Assert.AreEqual(a ^ b, c.Get("XOR_"), "xor " + at);
+					Assert.AreEqual(~a & 15, c.Get("NOT_"), "not " + at);
+					Assert.AreEqual(~(a & b) & 15, c.Get("NAND_"), "nand " + at);
+					Assert.AreEqual(~(a | b) & 15, c.Get("NOR_"), "nor " + at);
+					Assert.AreEqual(~(a ^ b) & 15, c.Get("XNOR_"), "xnor " + at);
 					Assert.AreEqual((a + b) & 15, c.Get("ADD"), "+ " + at);
 					Assert.AreEqual((a - b) & 15, c.Get("SUB"), "- " + at);
 					Assert.AreEqual((a << 1) & 15, c.Get("SHL"), "<< " + at);
 					Assert.AreEqual(a >> 2, c.Get("SHR"), ">> " + at);
 					Assert.AreEqual(s == 1 ? a : b, c.Get("MUX"), "if " + at);
-					Assert.AreEqual((a << 4) | b, c.Get("CAT"), "cat " + at);
-					Assert.AreEqual(a, c.Get("LOW"), "slice " + at);
-					Assert.AreEqual(a >> 3, c.Get("TOP"), "[-1] " + at);
-					Assert.AreEqual(a + b, c.Get("WIDE"), "u8() " + at);
+					Assert.AreEqual((a << 4) | b, c.Get("JOIN"), "join " + at);
+					Assert.AreEqual(a, c.Get("LOW"), "[0..3] " + at);
+					Assert.AreEqual(a, c.Get("HIGH"), "[7..4] " + at);
+					Assert.AreEqual(a >> 3, c.Get("TOP"), "[3] " + at);
+					Assert.AreEqual(a + b, c.Get("WIDE"), "8-bit sum " + at);
 					Assert.AreEqual(a == b ? 1u : 0u, c.Get("EQ"), "== " + at);
 					Assert.AreEqual(a != b ? 1u : 0u, c.Get("NE"), "!= " + at);
 					Assert.AreEqual(a < b ? 1u : 0u, c.Get("LT"), "< " + at);
@@ -173,12 +217,114 @@ circuit Ops(A: u4, B: u4, S) -> (
 		}
 
 		[Test]
-		public void AnnotatedWidthKeepsTheCarry()
+		public void SymbolsAreShortFormsOfTheWords()
 		{
 			ChipDescription chip = Build(@"
-circuit Carry(A: u4, B: u4) -> (SUM: u4, COUT):
-    wide: u5 = A + B
-    SUM = wide[0:4]
+chip Short
+    in A: 4, B: 4
+    out Y: 4, Z: 4
+
+    Y = (A & B) | (~A ^ B)
+    Z = (A and B) or (not A xor B)
+");
+			TestCircuit c = new(chip, library);
+			for (uint a = 0; a < 16; a++)
+			{
+				c.Set("A", a);
+				c.Set("B", 15 - a);
+				c.Step();
+				Assert.AreEqual(c.Get("Z"), c.Get("Y"), $"A={a}");
+			}
+		}
+
+		[Test]
+		public void ComparisonsBindTighterThanAndOr()
+		{
+			ChipDescription chip = Build(@"
+chip Decode
+    in OP: 4, EN
+    out ADD, ANY
+
+    ADD = OP == 2 and EN
+    ANY = OP == 1 or OP == 2 or OP == 3
+");
+			TestCircuit c = new(chip, library);
+			for (uint op = 0; op < 16; op++)
+			{
+				for (uint en = 0; en < 2; en++)
+				{
+					c.Set("OP", op);
+					c.Set("EN", en);
+					c.Step();
+					Assert.AreEqual(op == 2 && en == 1 ? 1u : 0u, c.Get("ADD"), $"OP={op} EN={en}");
+					Assert.AreEqual(op >= 1 && op <= 3 ? 1u : 0u, c.Get("ANY"), $"OP={op}");
+				}
+			}
+		}
+
+		[Test]
+		public void LongChoicesContinueOnTheNextLines()
+		{
+			ChipDescription chip = Build(@"
+chip Alu
+    in A: 4, B: 4, OP: 4
+    out Y: 4
+
+    Y = if OP == 0 then A + B
+        else if OP == 1 then A - B
+        else if OP == 2 then
+            A and B
+        else A or
+            B
+");
+			TestCircuit c = new(chip, library);
+			for (uint op = 0; op < 4; op++)
+			{
+				c.Set("A", 12);
+				c.Set("B", 10);
+				c.Set("OP", op);
+				c.Step();
+				uint expected = op switch { 0 => 22u & 15, 1 => 2u, 2 => 8u, _ => 14u };
+				Assert.AreEqual(expected, c.Get("Y"), $"OP={op}");
+			}
+		}
+
+		[Test]
+		public void NarrowerValuesFillTheTopBitsWithZero()
+		{
+			Build(@"
+chip Pass8
+    in D: 8
+    out Q: 8
+
+    Q = D
+");
+			ChipDescription chip = Build(@"
+chip Widen
+    in A: 4, B
+    out Y: 8, Z: 8
+
+    Y = A
+    Z = Pass8(B)
+");
+			TestCircuit c = new(chip, library);
+			c.Set("A", 9);
+			c.Set("B", 1);
+			c.Step();
+			Assert.AreEqual(9u, c.Get("Y"));
+			Assert.AreEqual(1u, c.Get("Z"));
+		}
+
+		[Test]
+		public void DeclaredWidthKeepsTheCarry()
+		{
+			ChipDescription chip = Build(@"
+chip Carry
+    in A: 4, B: 4
+    out SUM: 4, COUT
+
+    wire wide: 5 = A + B
+    SUM = wide[0..3]
     COUT = wide[4]
 ");
 			TestCircuit c = new(chip, library);
@@ -190,15 +336,42 @@ circuit Carry(A: u4, B: u4) -> (SUM: u4, COUT):
 		}
 
 		[Test]
-		public void ComponentsAreCalledUnpackedAndWiredByPin()
+		public void WiresCanBeBuiltBitByBit()
+		{
+			ChipDescription chip = Build(@"
+chip Reverse
+    in A: 4
+    out Y: 4
+
+    wire r: 4
+    for i in 0..3
+        r[i] = A[3 - i]
+    end
+    Y = r
+end
+");
+			TestCircuit c = new(chip, library);
+			c.Set("A", 0b0001);
+			c.Step();
+			Assert.AreEqual(0b1000u, c.Get("Y"));
+		}
+
+		[Test]
+		public void ChipsAreCalledUnpackedAndWiredByPin()
 		{
 			Build(@"
-circuit HalfAdder(A, B) -> (SUM, CARRY):
-    SUM = A ^ B
-    CARRY = A & B
+chip HalfAdder
+    in A, B
+    out SUM, CARRY
+
+    SUM = A xor B
+    CARRY = A and B
 ");
 			ChipDescription chip = Build(@"
-circuit TwoHalves(X, Y, Z) -> (S, C1, C2):
+chip TwoHalves
+    in X, Y, Z
+    out S, C1, C2
+
     s1, C1 = HalfAdder(X, Y)
     second = HalfAdder()
     second.A = s1
@@ -226,13 +399,19 @@ circuit TwoHalves(X, Y, Z) -> (S, C1, C2):
 		public void UnpackedOutputsKeepTheirOwnWidths()
 		{
 			Build(@"
-circuit Add4(A: u4, B: u4) -> (S: u4, COUT):
-    wide: u5 = A + B
-    S = wide[0:4]
+chip Add4
+    in A: 4, B: 4
+    out S: 4, COUT
+
+    wire wide: 5 = A + B
+    S = wide[0..3]
     COUT = wide[4]
 ");
 			ChipDescription chip = Build(@"
-circuit Add4Twice(A: u4, B: u4) -> (S: u4, C1, C2):
+chip Add4Twice
+    in A: 4, B: 4
+    out S: 4, C1, C2
+
     s, carry = Add4(A, B)
     total = s
     total, C2 = Add4(total, B)
@@ -252,9 +431,12 @@ circuit Add4Twice(A: u4, B: u4) -> (S: u4, C1, C2):
 		public void TriStateBuffersShareOneSignal()
 		{
 			ChipDescription chip = Build(@"
-circuit SharedBus(A, B, SEL) -> Y:
+chip SharedBus
+    in A, B, SEL
+    out Y
+
     bus = TRISTATE(A, SEL)
-    bus = TRISTATE(B, ~SEL)
+    bus = TRISTATE(B, not SEL)
     Y = bus
 ");
 			TestCircuit c = new(chip, library);
@@ -273,10 +455,13 @@ circuit SharedBus(A, B, SEL) -> Y:
 		public void ConstantConditionsAreChosenWhenBuilding()
 		{
 			ChipDescription chip = Build(@"
-INVERT = 1
+const INVERT = 1
 
-circuit Maybe(A: u4) -> Y: u4:
-    Y = ~A if INVERT else A
+chip Maybe
+    in A: 4
+    out Y: 4
+
+    Y = if INVERT then not A else A
 ");
 			Assert.AreEqual(4, NandCount(chip), "only the chosen branch is built");
 		}
@@ -286,18 +471,19 @@ circuit Maybe(A: u4) -> Y: u4:
 		[Test]
 		public void LogicUsesFewNandGates()
 		{
-			Assert.AreEqual(5, NandCount(Build("circuit H(A, B) -> (S, C):\n    S = A ^ B\n    C = A & B\n")), "half adder");
-			Assert.AreEqual(9, NandCount(Build("circuit F(A, B, CI) -> (S, CO):\n    S = A ^ B ^ CI\n    CO = (A & B) | (CI & (A ^ B))\n")), "full adder");
-			Assert.LessOrEqual(NandCount(Build("circuit Add4(A: u4, B: u4) -> Y: u4:\n    Y = A + B\n")), 4 * 9, "4-bit adder");
-			Assert.AreEqual(4, NandCount(Build("circuit M(A, B, S) -> Y:\n    Y = A if S else B\n")), "2:1 multiplexer");
-			Assert.AreEqual(0, NandCount(Build("circuit W(A: u4) -> Y: u4:\n    Y = A & 0b1111\n")), "AND with all ones is a wire");
+			Assert.AreEqual(5, NandCount(Build("chip H\n    in A, B\n    out S, C\n    S = A xor B\n    C = A and B\n")), "half adder");
+			Assert.AreEqual(9, NandCount(Build("chip F\n    in A, B, CI\n    out S, CO\n    S = A xor B xor CI\n    CO = (A and B) or (CI and (A xor B))\n")), "full adder");
+			Assert.LessOrEqual(NandCount(Build("chip Add4\n    in A: 4, B: 4\n    out Y: 4\n    Y = A + B\n")), 4 * 9, "4-bit adder");
+			Assert.AreEqual(4, NandCount(Build("chip M\n    in A, B, S\n    out Y\n    Y = if S then A else B\n")), "2:1 multiplexer");
+			Assert.AreEqual(1, NandCount(Build("chip N\n    in A, B\n    out Y\n    Y = A nand B\n")), "nand is one gate");
+			Assert.AreEqual(0, NandCount(Build("chip W\n    in A: 4\n    out Y: 4\n    Y = A and 0b1111\n")), "AND with all ones is a wire");
 		}
 
 		// ---- Layout ----
 
-		[TestCase("circuit Add8(A: u8, B: u8) -> Y: u8:\n    Y = A + B\n")]
-		[TestCase("circuit Latch(S_N, R_N) -> (Q, QN):\n    Q = NAND(S_N, QN)\n    QN = NAND(R_N, Q)\n")]
-		[TestCase("circuit Mix(A: u4, B: u4, S) -> (Y: u4, EQ):\n    Y = (A + B) if S else (A ^ B)\n    EQ = A == B\n")]
+		[TestCase("chip Add8\n    in A: 8, B: 8\n    out Y: 8\n    Y = A + B\n")]
+		[TestCase("chip Latch\n    in S_N, R_N\n    out Q, QN\n    Q = NAND(S_N, QN)\n    QN = NAND(R_N, Q)\n")]
+		[TestCase("chip Mix\n    in A: 4, B: 4, S\n    out Y: 4, EQ\n    Y = if S then A + B else A xor B\n    EQ = A == B\n")]
 		public void LayoutHasNoOverlappingPartsAndOnlyStraightWires(string source)
 		{
 			ChipDescription chip = Build(source);
@@ -335,35 +521,52 @@ circuit Maybe(A: u4) -> Y: u4:
 		[Test]
 		public void UnknownNamesSuggestTheClosestOne()
 		{
-			RhdlDiagnostic[] errors = Errors("circuit C(A, B) -> Y:\n    total = A & B\n    Y = totl\n");
-			AssertMessage(errors, 3, "Did you mean 'total'");
+			RhdlDiagnostic[] errors = Errors("chip C\n    in A, B\n    out Y\n    total = A and B\n    Y = totl\n");
+			AssertMessage(errors, 5, "Did you mean 'total'");
 		}
 
 		[Test]
 		public void PinsCannotBeAssignedTwice()
 		{
-			AssertMessage(Errors("circuit C(A, B) -> Y:\n    Y = A\n    Y = B\n"), 3, "assigned more than once");
+			AssertMessage(Errors("chip C\n    in A, B\n    out Y\n    Y = A\n    Y = B\n"), 5, "assigned more than once");
 		}
 
 		[Test]
 		public void VariablesMustBeAssignedBeforeUse()
 		{
-			RhdlDiagnostic[] errors = Errors("circuit C(A) -> Y:\n    Y = t\n    t = A\n    t = ~t\n");
-			AssertMessage(errors, 2, "used before it is assigned");
+			RhdlDiagnostic[] errors = Errors("chip C\n    in A\n    out Y\n    Y = t\n    t = A\n    t = not t\n");
+			AssertMessage(errors, 4, "used before it is assigned");
 		}
 
 		[Test]
-		public void WidthMismatchExplainsTheFix()
+		public void TooWideValuesExplainTheFix()
 		{
-			AssertMessage(Errors("circuit C(A: u4) -> Y: u8:\n    Y = A\n"), 2, "u8(...)");
-			AssertMessage(Errors("circuit C(A: u8) -> Y: u4:\n    Y = A\n"), 2, "slice");
+			AssertMessage(Errors("chip C\n    in A: 8\n    out Y: 4\n    Y = A\n"), 4, "[0..3]");
+			AssertMessage(Errors("chip C\n    in A: 4\n    out Y\n    Y = A[2..5]\n"), 4, "its bits are 0..3");
 		}
 
 		[Test]
-		public void OldSyntaxGetsAHint()
+		public void PythonHabitsGetAHint()
 		{
-			AssertMessage(Errors("circuit C(A) -> Y:\n    Y = A\nend\n"), 3, "no longer uses 'end'");
-			AssertMessage(Errors("circuit C(A, S) -> Y:\n    if S:\n        Y = A\n"), 2, "a if select else b");
+			AssertMessage(Errors("chip C\n    in A, S\n    out Y\n    Y = A if S else 0\n"), 4, "if select then A else B");
+			AssertMessage(Errors("chip C\n    in A, S\n    out Y\n    if S:\n        Y = A\n"), 4, "if select then A else B");
+			AssertMessage(Errors("chip C\n    in A: 4\n    out Y\n    for i in range(4):\n        Y = A[i]\n"), 4, "for i in 0..3");
+			AssertMessage(Errors("chip C\n    in A: 4\n    out Y: 2\n    Y = A[0:2]\n"), 4, "A[0..3]");
+			AssertMessage(Errors("chip C\n    in A: u4\n    out Y\n    Y = A[0]\n"), 2, "': 4'");
+			AssertMessage(Errors("chip C(A) -> Y:\n    Y = A\n"), 1, "Pins go on their own lines");
+		}
+
+		[Test]
+		public void UnclosedLoopsAreReported()
+		{
+			AssertMessage(Errors("chip C\n    in A: 4\n    out Y: 4\n    for i in 0..3\n        Y[i] = A[i]\n"), 4, "has no 'end'");
+		}
+
+		[Test]
+		public void KeywordsCannotBeNames()
+		{
+			AssertMessage(Errors("chip C\n    in A\n    out Y\n    out = A\n    Y = A\n"), 4, "");
+			AssertMessage(Errors("chip C\n    in A, xor\n    out Y\n    Y = A\n"), 2, "keyword");
 		}
 
 		[Test]
@@ -376,14 +579,62 @@ circuit Maybe(A: u4) -> Y: u4:
 		[Test]
 		public void MissingOutputsAndInputsAreReported()
 		{
-			AssertMessage(Errors("circuit C(A) -> (Y, Z):\n    Y = A\n"), 1, "Output 'Z' is never assigned");
-			AssertMessage(Errors("circuit C(A) -> Y:\n    Y = NAND(A)\n"), 2, "NAND needs both inputs");
+			AssertMessage(Errors("chip C\n    in A\n    out Y, Z\n    Y = A\n"), 3, "Output 'Z' is never assigned");
+			AssertMessage(Errors("chip C\n    in A\n    out Y\n    Y = NAND(A)\n"), 4, "NAND needs both inputs");
+			AssertMessage(Errors("chip C\n    in A\n    Y = A\n"), 1, "out Y");
 		}
 
 		[Test]
 		public void PinWidthsMustExistOnChips()
 		{
-			AssertMessage(Errors("circuit C(A: u6) -> Y:\n    Y = A[0]\n"), 1, "1, 4 or 8 bits");
+			AssertMessage(Errors("chip C\n    in A: 6\n    out Y\n    Y = A[0]\n"), 2, "1, 4 or 8 bits");
+		}
+
+		// ---- RHDL 1.0 sources ----
+
+		const string Version1Source = @"
+WIDTH = 4
+
+circuit Mix(A: u4, B: u4, S) -> (Y: u4, LOW: u4, R: u4, W: u8):
+    # a comment
+    t = (A & B) | ~A    # trailing comment
+    Y = A + B if S and not A[0] else t ^ B
+    LOW = cat(A, B)[0:2]
+    for i in range(WIDTH):
+        R[i] = A[WIDTH - 1 - i]
+    W = u8(A) + u8(B)
+";
+
+		[Test]
+		public void Version1SourcesStillBuild()
+		{
+			TestCircuit c = new(Build(Version1Source), library);
+			c.Set("A", 6);
+			c.Set("B", 3);
+			c.Set("S", 1);
+			c.Step();
+			Assert.AreEqual(9u, c.Get("Y"));
+			Assert.AreEqual(3u, c.Get("LOW"));
+			Assert.AreEqual(6u, c.Get("R"));
+			Assert.AreEqual(9u, c.Get("W"));
+		}
+
+		[Test]
+		public void Version1SourcesUpgradeToTheSameChip()
+		{
+			Assert.IsTrue(RhdlUpgrade.IsLegacySource(Version1Source));
+			Assert.IsTrue(RhdlUpgrade.TryUpgrade(Version1Source, out string upgraded, out string error), error);
+			Assert.IsFalse(RhdlUpgrade.IsLegacySource(upgraded), upgraded);
+			StringAssert.Contains("chip Mix", upgraded);
+			StringAssert.Contains("# a comment", upgraded);
+			StringAssert.Contains("# trailing comment", upgraded);
+			StringAssert.Contains("for i in 0..WIDTH - 1", upgraded);
+			StringAssert.Contains("join(A, B)[0..1]", upgraded);
+
+			string before = Newtonsoft.Json.JsonConvert.SerializeObject(RhdlCompiler.Compile(Version1Source, library).Description);
+			RhdlCompileResult after = RhdlCompiler.Compile(upgraded, library);
+			Assert.IsTrue(after.Success, upgraded + "\n" + string.Join("\n", after.Diagnostics.Select(d => d.ToString())));
+			Assert.AreEqual(before, Newtonsoft.Json.JsonConvert.SerializeObject(after.Description), upgraded);
 		}
 
 		// ---- Sources that must not take the editor down ----
@@ -393,25 +644,25 @@ circuit Maybe(A: u4) -> Y: u4:
 		{
 			int depth = RhdlCompiler.MaxExpressionNesting + 1;
 			string brackets = new string('(', depth) + "A" + new string(')', depth);
-			AssertMessage(Errors($"circuit C(A) -> Y:\n    Y = {brackets}\n"), 2, "nested more than");
-			AssertMessage(Errors($"circuit C(A) -> Y:\n    Y = {new string('~', 50000)}A\n"), 2, "nested more than");
-			AssertMessage(Errors($"circuit C(A) -> Y:\n    Y = {string.Concat(Enumerable.Repeat("not ", depth))}A\n"), 2, "nested more than");
+			AssertMessage(Errors($"chip C\n    in A\n    out Y\n    Y = {brackets}\n"), 4, "nested more than");
+			AssertMessage(Errors($"chip C\n    in A\n    out Y\n    Y = {new string('~', 50000)}A\n"), 4, "nested more than");
+			AssertMessage(Errors($"chip C\n    in A\n    out Y\n    Y = {string.Concat(Enumerable.Repeat("not ", depth))}A\n"), 4, "nested more than");
 
 			// Just inside the limit still builds.
 			depth = RhdlCompiler.MaxExpressionNesting - 1;
-			Build($"circuit C(A) -> Y:\n    Y = {new string('(', depth)}A{new string(')', depth)}\n");
+			Build($"chip C\n    in A\n    out Y\n    Y = {new string('(', depth)}A{new string(')', depth)}\n");
 		}
 
 		[Test]
 		public void LongChainsDoNotOverflowTheStack()
 		{
 			// Each of these used to recurse deeper than a 1 MB stack allows.
-			Build($"circuit LongAnd(A) -> Y:\n    Y = {string.Join(" & ", Enumerable.Repeat("A", 3000))}\n");
+			Build($"chip LongAnd\n    in A\n    out Y\n    Y = {string.Join(" and ", Enumerable.Repeat("A", 3000))}\n");
 
 			const int wires = 5000;
-			string reversed = "circuit Reversed(A) -> Y:\n    Y = w0\n" +
+			string reversed = "chip Reversed\n    in A\n    out Y\n    Y = w0\n" +
 			                  string.Concat(Enumerable.Range(0, wires).Select(i => $"    w{i} = w{i + 1}\n")) +
-			                  $"    w{wires} = ~A\n";
+			                  $"    w{wires} = not A\n";
 			TestCircuit c = new(Build(reversed), library);
 			c.Set("A", 0);
 			c.Step();
@@ -422,8 +673,8 @@ circuit Maybe(A: u4) -> Y: u4:
 		public void LoopsWithEmptyBodiesStillHaveALimit()
 		{
 			System.Diagnostics.Stopwatch time = System.Diagnostics.Stopwatch.StartNew();
-			AssertMessage(Errors("circuit C(A) -> Y:\n    for i in range(1000000000000):\n        pass\n    Y = A\n"), 2, "Loops repeat more than");
-			AssertMessage(Errors("circuit C(A) -> Y:\n    for i in range(1000000000):\n        for j in range(0):\n            Y = A\n    Y = A\n"), 2, "Loops repeat more than");
+			AssertMessage(Errors("chip C\n    in A\n    out Y\n    for i in 0..1000000000000\n    end\n    Y = A\n"), 4, "Loops repeat more than");
+			AssertMessage(Errors("chip C\n    in A\n    out Y\n    for i in 0..1000000000\n        for j in 0..0 step 1\n        end\n    end\n    Y = A\n"), 4, "Loops repeat more than");
 			Assert.Less(time.ElapsedMilliseconds, 5000);
 		}
 	}

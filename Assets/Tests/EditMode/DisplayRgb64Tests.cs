@@ -170,7 +170,10 @@ namespace DLS.Tests
 		{
 			ChipLibrary library = TestLibrary.Create();
 			RhdlCompileResult result = RhdlCompiler.Compile(@"
-circuit Paint(X: u8, Y: u8, C: u4, CLK) -> (R: u4, G: u4, B: u4):
+chip Paint
+    in X: 8, Y: 8, C: 4, CLK
+    out R: 4, G: 4, B: 4
+
     s = RGB_DISPLAY_64(X, Y, C, C, C, 0, 1, 1, CLK)
     R = s.R_OUT
     G = s.G_OUT

@@ -1,4 +1,8 @@
 # 8-bit 2:1 multiplexer: eight 1-bit multiplexers sharing S. S=1 selects A.
-circuit Mux2x8(A: u8, B: u8, S) -> Y: u8:
-    for i in range(8):
+chip Mux2x8
+    in A: 8, B: 8, S
+    out Y: 8
+
+    for i in 0..7
         Y[i] = Mux(A[i], B[i], S)
+    end
