@@ -1,3 +1,6 @@
 # NOT gate: one NAND with both inputs tied together.
-circuit Not(A) -> Y:
+chip Not
+    in A
+    out Y
+
     Y = NAND(A, A)

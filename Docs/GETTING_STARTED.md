@@ -63,12 +63,15 @@ RHDL is Rewired's hardware description language.
 
 Minimal example:
 
-```python
-circuit And2(A, B) -> Y:
-    Y = A & B
+```text
+chip And2
+    in A, B
+    out Y
+
+    Y = A and B
 ```
 
-Build the source in RHDL Studio to generate an ordinary Rewired circuit.
+Name the chip, list its `in` and `out` pins, and give each output a value. Build the source in RHDL Studio to generate an ordinary Rewired chip.
 
 For syntax, buses, loops, components and feedback, read [RHDL_GUIDE.md](RHDL_GUIDE.md).
 

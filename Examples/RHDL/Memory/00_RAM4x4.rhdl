@@ -8,12 +8,15 @@
 #
 # WE is sampled on the rising CLK edge.
 # RESET clears all four words synchronously.
-circuit Ram4x4(D: u4, A0, A1, WE, CLK, RESET) -> Q: u4:
-    word0 = Reg4(D, WE & ~A1 & ~A0, CLK, RESET)
-    word1 = Reg4(D, WE & ~A1 & A0, CLK, RESET)
-    word2 = Reg4(D, WE & A1 & ~A0, CLK, RESET)
-    word3 = Reg4(D, WE & A1 & A0, CLK, RESET)
+chip Ram4x4
+    in D: 4, A0, A1, WE, CLK, RESET
+    out Q: 4
 
-    low = word1 if A0 else word0
-    high = word3 if A0 else word2
-    Q = high if A1 else low
+    word0 = Reg4(D, WE and not A1 and not A0, CLK, RESET)
+    word1 = Reg4(D, WE and not A1 and A0, CLK, RESET)
+    word2 = Reg4(D, WE and A1 and not A0, CLK, RESET)
+    word3 = Reg4(D, WE and A1 and A0, CLK, RESET)
+
+    low = if A0 then word1 else word0
+    high = if A0 then word3 else word2
+    Q = if A1 then high else low

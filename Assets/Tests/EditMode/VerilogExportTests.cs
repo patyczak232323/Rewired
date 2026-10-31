@@ -16,14 +16,20 @@ namespace DLS.Tests
 	public class VerilogExportTests
 	{
 		const string Alu4Source = @"
-circuit Alu4(A: u4, B: u4, OP0, OP1) -> (Y: u4, EQ, LT):
-    Y = ((A - B) if OP0 else (A + B)) if OP1 else ((A ^ B) if OP0 else (A & B))
+chip Alu4
+    in A: 4, B: 4, OP0, OP1
+    out Y: 4, EQ, LT
+
+    Y = if OP1 then (if OP0 then A - B else A + B) else if OP0 then A xor B else A and B
     EQ = A == B
     LT = A < B
 ";
 
 		const string Add8Source = @"
-circuit Add8(A: u8, B: u8) -> Y: u8:
+chip Add8
+    in A: 8, B: 8
+    out Y: 8
+
     Y = A + B
 ";
 

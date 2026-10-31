@@ -1,5 +1,8 @@
 # One-bit full adder.
-circuit FullAdder(A, B, CIN) -> (SUM, COUT):
-    ab = A ^ B
-    SUM = ab ^ CIN
-    COUT = (A & B) | (CIN & ab)
+chip FullAdder
+    in A, B, CIN
+    out SUM, COUT
+
+    ab = A xor B
+    SUM = ab xor CIN
+    COUT = A and B or CIN and ab

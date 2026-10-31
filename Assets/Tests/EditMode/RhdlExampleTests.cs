@@ -259,8 +259,11 @@ namespace DLS.Tests
 		public void InvertDoesNotChangeLaterUsesOfItsOperand()
 		{
 			RhdlCompileResult result = RhdlCompiler.Compile(@"
-circuit NotThenUse(A: u4) -> (N: u4, Y: u4):
-    N = ~A
+chip NotThenUse
+    in A: 4
+    out N: 4, Y: 4
+
+    N = not A
     Y = A + 1
 ", library);
 			Assert.IsTrue(result.Success);
@@ -281,7 +284,10 @@ circuit NotThenUse(A: u4) -> (N: u4, Y: u4):
 		public void ComponentPinsAcceptNamesWithoutSpaces()
 		{
 			RhdlCompileResult result = RhdlCompiler.Compile(@"
-circuit StructuralNand(A, B) -> Y:
+chip StructuralNand
+    in A, B
+    out Y
+
     Y = NAND(IN_A=A, INB=B)
 ", library);
 			Assert.IsTrue(result.Success, string.Join("\n", result.Diagnostics.Select(d => d.ToString())));
@@ -300,12 +306,12 @@ circuit StructuralNand(A, B) -> Y:
 		[Test]
 		public void InvalidSourceReportsDiagnosticsWithLine()
 		{
-			const string source = "circuit Broken(A) -> Y:\n    # comment\n\n    Y = A & MISSING\n";
+			const string source = "chip Broken\n    in A\n    out Y\n    # comment\n\n    Y = A and MISSING\n";
 			RhdlCompileResult result = RhdlCompiler.Compile(source, library);
 
 			Assert.IsFalse(result.Success);
 			Assert.IsNotEmpty(result.Diagnostics);
-			Assert.IsTrue(result.Diagnostics.Any(d => d.Line == 4), "diagnostic should point at the offending line:\n" + string.Join("\n", result.Diagnostics.Select(d => d.ToString())));
+			Assert.IsTrue(result.Diagnostics.Any(d => d.Line == 6), "diagnostic should point at the offending line:\n" + string.Join("\n", result.Diagnostics.Select(d => d.ToString())));
 		}
 	}
 }

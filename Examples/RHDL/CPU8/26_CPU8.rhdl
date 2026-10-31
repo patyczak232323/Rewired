@@ -9,18 +9,18 @@
 #
 # Datapath, left to right: PC -> ROM -> control unit and register file ->
 # ALU / RAM -> write-back multiplexer -> register file.
-circuit Cpu8(CLK, RESET) -> (
-    PC_LO: u8, PC_HI: u4, INSTR_HI: u8, INSTR_LO: u8,
-    R0: u8, R1: u8, R2: u8, R3: u8, R4: u8, R5: u8, R6: u8, R7: u8,
-    Z, C, HALTED,
-):
+chip Cpu8
+    in CLK, RESET
+    out PC_LO: 8, PC_HI: 4, INSTR_HI: 8, INSTR_LO: 8, R0: 8, R1: 8, R2: 8, R3: 8, R4: 8, R5: 8
+    out R6: 8, R7: 8, Z, C, HALTED
+
     # Fetch. pc, regs, flags and halted are further down: using them here is
     # the feedback loop of the processor.
     rom = ProgramRom(pc.LO, pc.HI)
     hi = rom.INSTR_HI
     lo = rom.INSTR_LO
-    rd = u4(hi[0:3])
-    rs = u4(lo[5:8])
+    wire rd: 4 = hi[0..2]
+    wire rs: 4 = lo[5..7]
 
     # Decode.
     cu = ControlUnit(hi, flags.Z, flags.C)

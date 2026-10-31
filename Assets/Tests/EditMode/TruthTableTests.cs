@@ -13,31 +13,46 @@ namespace DLS.Tests
 	public class TruthTableTests
 	{
 		const string HalfAdderSource = @"
-circuit HalfAdder(A, B) -> (SUM, CARRY):
-    SUM = A ^ B
-    CARRY = A & B
+chip HalfAdder
+    in A, B
+    out SUM, CARRY
+
+    SUM = A xor B
+    CARRY = A and B
 ";
 
 		// Same pins as HalfAdder, but CARRY is wrong.
 		const string BrokenHalfAdderSource = @"
-circuit HalfAdder(A, B) -> (SUM, CARRY):
-    SUM = A ^ B
-    CARRY = A | B
+chip HalfAdder
+    in A, B
+    out SUM, CARRY
+
+    SUM = A xor B
+    CARRY = A or B
 ";
 
 		const string RenamedPinsSource = @"
-circuit HalfAdder(X, B) -> (SUM, CARRY):
-    SUM = X ^ B
-    CARRY = X & B
+chip HalfAdder
+    in X, B
+    out SUM, CARRY
+
+    SUM = X xor B
+    CARRY = X and B
 ";
 
 		const string Add8Source = @"
-circuit Add8(A: u8, B: u8) -> Y: u8:
+chip Add8
+    in A: 8, B: 8
+    out Y: 8
+
     Y = A + B
 ";
 
 		const string LatchSource = @"
-circuit Latch(S_N, R_N) -> (Q, QN):
+chip Latch
+    in S_N, R_N
+    out Q, QN
+
     Q = NAND(S_N, QN)
     QN = NAND(R_N, Q)
 ";

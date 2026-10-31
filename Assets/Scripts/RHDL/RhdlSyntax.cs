@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace DLS.RHDL
 {
@@ -61,243 +62,6 @@ namespace DLS.RHDL
 		}
 	}
 
-	// Splits source text into tokens the way Python does: indentation at the start of a
-	// line becomes INDENT/DEDENT tokens, and line breaks inside brackets are ignored.
-	internal static class RhdlLexer
-	{
-		const int TabWidth = 4;
-
-		static readonly string[] Operators =
-		{
-			"->", "==", "!=", "<=", ">=", "<<", ">>", "**", "//",
-			"(", ")", "[", "]", ",", ":", ".", "=", "+", "-", "*", "/", "%", "&", "|", "^", "~", "<", ">", "@", "{", "}", ";"
-		};
-
-		public static List<Token> Tokenize(string source)
-		{
-			List<Token> tokens = new();
-			Stack<int> indents = new();
-			indents.Push(0);
-
-			string text = (source ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
-			int pos = 0;
-			int line = 1;
-			int lineStart = 0;
-			int depth = 0;
-			bool atLineStart = true;
-
-			while (pos < text.Length)
-			{
-				if (atLineStart && depth > 0)
-				{
-					// A line continued inside brackets: indentation means nothing.
-					atLineStart = false;
-				}
-
-				if (atLineStart && depth == 0)
-				{
-					// Measure the indentation of a new logical line. Lines holding only
-					// whitespace or a comment do not affect the block structure.
-					int width = 0;
-					int scan = pos;
-					while (scan < text.Length && (text[scan] == ' ' || text[scan] == '\t'))
-					{
-						width = text[scan] == '\t' ? (width / TabWidth + 1) * TabWidth : width + 1;
-						scan++;
-					}
-
-					if (scan >= text.Length) break;
-					if (text[scan] == '\n' || text[scan] == '#')
-					{
-						while (scan < text.Length && text[scan] != '\n') scan++;
-						pos = scan + 1;
-						line++;
-						lineStart = pos;
-						continue;
-					}
-
-					int column = scan - lineStart + 1;
-					if (width > indents.Peek())
-					{
-						indents.Push(width);
-						tokens.Add(new Token(TokenKind.Indent, string.Empty, line, column));
-					}
-					else
-					{
-						while (width < indents.Peek())
-						{
-							indents.Pop();
-							tokens.Add(new Token(TokenKind.Dedent, string.Empty, line, column));
-						}
-
-						if (width != indents.Peek())
-						{
-							throw new RhdlSyntaxException(line, column, "This line's indentation does not match any enclosing block.");
-						}
-					}
-
-					pos = scan;
-					atLineStart = false;
-				}
-
-				char c = text[pos];
-				int col = pos - lineStart + 1;
-
-				if (c == '\n')
-				{
-					if (depth == 0 && tokens.Count > 0 && tokens[^1].Kind != TokenKind.Newline)
-					{
-						tokens.Add(new Token(TokenKind.Newline, string.Empty, line, col));
-					}
-
-					pos++;
-					line++;
-					lineStart = pos;
-					atLineStart = true;
-					continue;
-				}
-
-				if (c == ' ' || c == '\t')
-				{
-					pos++;
-					continue;
-				}
-
-				if (c == '#')
-				{
-					while (pos < text.Length && text[pos] != '\n') pos++;
-					continue;
-				}
-
-				if (c == '\\' && pos + 1 < text.Length && text[pos + 1] == '\n')
-				{
-					// Explicit line continuation.
-					pos += 2;
-					line++;
-					lineStart = pos;
-					continue;
-				}
-
-				if (char.IsLetter(c) || c == '_')
-				{
-					int start = pos;
-					while (pos < text.Length && (char.IsLetterOrDigit(text[pos]) || text[pos] == '_')) pos++;
-					tokens.Add(new Token(TokenKind.Name, text.Substring(start, pos - start), line, col));
-					continue;
-				}
-
-				if (char.IsDigit(c))
-				{
-					int start = pos;
-					while (pos < text.Length && (char.IsLetterOrDigit(text[pos]) || text[pos] == '_')) pos++;
-					string raw = text.Substring(start, pos - start);
-					if (!TryParseNumber(raw, out long value))
-					{
-						throw new RhdlSyntaxException(line, col, $"'{raw}' is not a valid number. Use decimal, 0b1010, 0o17 or 0xFF.");
-					}
-
-					tokens.Add(new Token(TokenKind.Number, raw, line, col, value));
-					continue;
-				}
-
-				if (c == '"' || c == '\'')
-				{
-					bool triple = pos + 2 < text.Length && text[pos + 1] == c && text[pos + 2] == c;
-					string quote = triple ? new string(c, 3) : c.ToString();
-					int startLine = line;
-					pos += quote.Length;
-					StringBuilder content = new();
-					while (true)
-					{
-						if (pos >= text.Length) throw new RhdlSyntaxException(startLine, col, "This string is never closed.");
-						if (string.CompareOrdinal(text, pos, quote, 0, quote.Length) == 0)
-						{
-							pos += quote.Length;
-							break;
-						}
-
-						if (text[pos] == '\n')
-						{
-							if (!triple) throw new RhdlSyntaxException(startLine, col, "This string is never closed.");
-							line++;
-							lineStart = pos + 1;
-						}
-
-						content.Append(text[pos]);
-						pos++;
-					}
-
-					tokens.Add(new Token(TokenKind.String, content.ToString(), startLine, col));
-					continue;
-				}
-
-				string op = null;
-				foreach (string candidate in Operators)
-				{
-					if (string.CompareOrdinal(text, pos, candidate, 0, candidate.Length) == 0)
-					{
-						op = candidate;
-						break;
-					}
-				}
-
-				if (op == null)
-				{
-					throw new RhdlSyntaxException(line, col, $"Unexpected character '{c}'.");
-				}
-
-				if (op is "(" or "[" or "{") depth++;
-				else if (op is ")" or "]" or "}") depth = Math.Max(0, depth - 1);
-
-				tokens.Add(new Token(TokenKind.Op, op, line, col));
-				pos += op.Length;
-			}
-
-			int endColumn = pos - lineStart + 1;
-			if (tokens.Count > 0 && tokens[^1].Kind != TokenKind.Newline)
-			{
-				tokens.Add(new Token(TokenKind.Newline, string.Empty, line, endColumn));
-			}
-
-			while (indents.Count > 1)
-			{
-				indents.Pop();
-				tokens.Add(new Token(TokenKind.Dedent, string.Empty, line, endColumn));
-			}
-
-			tokens.Add(new Token(TokenKind.End, string.Empty, line, endColumn));
-			return tokens;
-		}
-
-		static bool TryParseNumber(string raw, out long value)
-		{
-			value = 0;
-			string digits = raw.Replace("_", string.Empty);
-			int numberBase = 10;
-			if (digits.Length > 2 && digits[0] == '0')
-			{
-				char prefix = char.ToLowerInvariant(digits[1]);
-				if (prefix == 'x') numberBase = 16;
-				else if (prefix == 'b') numberBase = 2;
-				else if (prefix == 'o') numberBase = 8;
-				if (numberBase != 10) digits = digits.Substring(2);
-			}
-
-			if (digits.Length == 0) return false;
-			if (numberBase == 10) return long.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out value);
-
-			try
-			{
-				value = Convert.ToInt64(digits, numberBase);
-				return value >= 0;
-			}
-			catch (Exception)
-			{
-				return false;
-			}
-		}
-	}
-
 	// ---- Syntax tree ----
 
 	internal abstract class Node
@@ -338,6 +102,9 @@ namespace DLS.RHDL
 		public Expr Target;
 		public Expr Low;
 		public Expr High;
+		// RHDL 2.0 writes A[0..3]: both ends are bits of the slice, in either order. RHDL 1.0
+		// wrote A[0:4] like Python, with High one past the last bit.
+		public bool Inclusive;
 	}
 
 	internal sealed class CallArgument
@@ -412,6 +179,9 @@ namespace DLS.RHDL
 		public Expr Start;
 		public Expr Stop;
 		public Expr Step;
+		// RHDL 2.0 writes 'for i in 0..3': Stop is the last value and the loop counts down when
+		// Stop is below Start. RHDL 1.0 wrote range(0, 4), with Stop one past the last value.
+		public bool Inclusive;
 		public List<Statement> Body = new();
 	}
 
@@ -419,6 +189,8 @@ namespace DLS.RHDL
 	{
 		public string Name;
 		public string Doc;
+		// Written in the RHDL 1.0 syntax; messages then use that syntax too.
+		public bool Legacy;
 		public List<PortSyntax> Inputs = new();
 		public List<PortSyntax> Outputs = new();
 		public List<Statement> Body = new();
@@ -428,18 +200,219 @@ namespace DLS.RHDL
 	{
 		public List<AssignStatement> Constants = new();
 		public List<CircuitSyntax> Circuits = new();
+		// True when the source used the RHDL 1.0 (Python-style) syntax.
+		public bool Legacy;
 	}
 
-	// Recursive-descent parser. Operator precedence follows Python, loosest first:
-	// x if c else y, or, and, not, comparisons, |, ^, &, << >>, + -, ~, then calls,
-	// indexing and attributes.
+
+	// Splits RHDL 2.0 source into tokens. Indentation means nothing: every line is one
+	// statement. A line also continues on the next one inside brackets, after an operator or
+	// '=' at its end, and before a line that starts with 'else', 'then' or an operator.
+	internal static class RhdlLexer
+	{
+		static readonly string[] Operators =
+		{
+			"..", "==", "!=", "<=", ">=", "<<", ">>", "->", "**", "//",
+			"(", ")", "[", "]", ",", ":", ".", "=", "+", "-", "*", "/", "%", "&", "|", "^", "~", "!", "<", ">", "{", "}", ";", "@"
+		};
+
+		// A line ending in one of these goes on with the next line.
+		static readonly HashSet<string> ContinuesAfter = new(StringComparer.Ordinal)
+		{
+			"=", ",", "+", "-", "&", "|", "^", "~", "!", "==", "!=", "<", ">", "<=", ">=", "<<", ">>", "..",
+			"and", "or", "xor", "nand", "nor", "xnor", "not", "if", "then", "else"
+		};
+
+		// A line starting with one of these goes on with the line above.
+		static readonly HashSet<string> ContinuesBefore = new(StringComparer.Ordinal)
+		{
+			"+", "-", "&", "|", "^", "==", "!=", "<<", ">>", "..",
+			"and", "or", "xor", "nand", "nor", "xnor", "then", "else"
+		};
+
+		public static List<Token> Tokenize(string source)
+		{
+			List<Token> raw = new();
+			string text = (source ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+			int pos = 0;
+			int line = 1;
+			int lineStart = 0;
+			int depth = 0;
+
+			while (pos < text.Length)
+			{
+				char c = text[pos];
+				int col = pos - lineStart + 1;
+
+				if (c == '\n')
+				{
+					if (depth == 0) raw.Add(new Token(TokenKind.Newline, string.Empty, line, col));
+					pos++;
+					line++;
+					lineStart = pos;
+					continue;
+				}
+
+				if (c == ' ' || c == '\t')
+				{
+					pos++;
+					continue;
+				}
+
+				if (c == '#')
+				{
+					while (pos < text.Length && text[pos] != '\n') pos++;
+					continue;
+				}
+
+				if (c == '\\' && pos + 1 < text.Length && text[pos + 1] == '\n')
+				{
+					pos += 2;
+					line++;
+					lineStart = pos;
+					continue;
+				}
+
+				if (char.IsLetter(c) || c == '_')
+				{
+					int start = pos;
+					while (pos < text.Length && (char.IsLetterOrDigit(text[pos]) || text[pos] == '_')) pos++;
+					raw.Add(new Token(TokenKind.Name, text.Substring(start, pos - start), line, col));
+					continue;
+				}
+
+				if (char.IsDigit(c))
+				{
+					int start = pos;
+					while (pos < text.Length && (char.IsLetterOrDigit(text[pos]) || text[pos] == '_')) pos++;
+					string number = text.Substring(start, pos - start);
+					if (!TryParseNumber(number, out long value))
+					{
+						throw new RhdlSyntaxException(line, col, $"'{number}' is not a valid number. Use decimal (12), binary (0b1100) or hex (0xC).");
+					}
+
+					raw.Add(new Token(TokenKind.Number, number, line, col, value));
+					continue;
+				}
+
+				if (c == '"' || c == '\'')
+				{
+					throw new RhdlSyntaxException(line, col, "Text in quotes is not part of RHDL. Write notes as comments starting with #.");
+				}
+
+				string op = null;
+				foreach (string candidate in Operators)
+				{
+					if (string.CompareOrdinal(text, pos, candidate, 0, candidate.Length) == 0)
+					{
+						op = candidate;
+						break;
+					}
+				}
+
+				if (op == null) throw new RhdlSyntaxException(line, col, $"Unexpected character '{c}'.");
+
+				if (op is "(" or "[" or "{") depth++;
+				else if (op is ")" or "]" or "}") depth = Math.Max(0, depth - 1);
+
+				raw.Add(new Token(TokenKind.Op, op, line, col));
+				pos += op.Length;
+			}
+
+			// Join continued lines and drop empty ones.
+			List<Token> tokens = new(raw.Count + 2);
+			for (int i = 0; i < raw.Count; i++)
+			{
+				Token token = raw[i];
+				if (token.Kind == TokenKind.Newline)
+				{
+					if (tokens.Count == 0 || tokens[^1].Kind == TokenKind.Newline) continue;
+					if (ContinuesAfter.Contains(tokens[^1].Text)) continue;
+					int next = i + 1;
+					while (next < raw.Count && raw[next].Kind == TokenKind.Newline) next++;
+					if (next < raw.Count && ContinuesBefore.Contains(raw[next].Text)) continue;
+				}
+
+				tokens.Add(token);
+			}
+
+			int endLine = line;
+			int endColumn = pos - lineStart + 1;
+			if (tokens.Count > 0 && tokens[^1].Kind != TokenKind.Newline)
+			{
+				tokens.Add(new Token(TokenKind.Newline, string.Empty, endLine, endColumn));
+			}
+
+			tokens.Add(new Token(TokenKind.End, string.Empty, endLine, endColumn));
+			return tokens;
+		}
+
+		internal static bool TryParseNumber(string raw, out long value)
+		{
+			value = 0;
+			string digits = raw.Replace("_", string.Empty);
+			int numberBase = 10;
+			if (digits.Length > 2 && digits[0] == '0')
+			{
+				char prefix = char.ToLowerInvariant(digits[1]);
+				if (prefix == 'x') numberBase = 16;
+				else if (prefix == 'b') numberBase = 2;
+				else if (prefix == 'o') numberBase = 8;
+				if (numberBase != 10) digits = digits.Substring(2);
+			}
+
+			if (digits.Length == 0) return false;
+			if (numberBase == 10) return long.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out value);
+
+			try
+			{
+				value = Convert.ToInt64(digits, numberBase);
+				return value >= 0;
+			}
+			catch (Exception)
+			{
+				return false;
+			}
+		}
+
+		// Width implied by a literal's spelling: 0b0010 is 4 bits, 0x0F is 8 bits. 0 if none.
+		internal static int SpelledWidth(string raw)
+		{
+			string digits = raw.Replace("_", string.Empty);
+			if (digits.Length > 2 && digits[0] == '0')
+			{
+				char prefix = char.ToLowerInvariant(digits[1]);
+				if (prefix == 'b') return digits.Length - 2;
+				if (prefix == 'x') return (digits.Length - 2) * 4;
+			}
+
+			return 0;
+		}
+	}
+
+	// RHDL 2.0 parser.
+	//
+	//   chip FullAdder
+	//       in A, B, CIN
+	//       out SUM, COUT
+	//
+	//       ab = A xor B
+	//       SUM = ab xor CIN
+	//       COUT = (A and B) or (CIN and ab)
+	//
+	// Operators, loosest first: 'if c then a else b', 'or'/'nor', 'xor'/'xnor', 'and'/'nand',
+	// comparisons, '<<' '>>', '+' '-', then 'not' and '-' on the value right after them, and
+	// finally calls, bits A[3] / A[0..3] and pins h.SUM. The symbols '|', '^', '&' and '~' are
+	// accepted as short forms of 'or', 'xor', 'and' and 'not'.
 	internal sealed class RhdlParser
 	{
 		public const int MaxWidth = 32;
 
-		// Brackets, calls, '~', 'not' and 'x if c else y' inside each other. Far more than any
+		// Brackets, calls, 'not' and 'if ... then ... else' inside each other. Far more than any
 		// circuit needs, and it keeps a pasted or generated expression from exhausting the stack.
 		public const int MaxNesting = 100;
+
+		static readonly Regex LegacyHeader = new(@"^[ \t]*circuit[ \t]+\w+[ \t]*\(", RegexOptions.Multiline);
 
 		readonly List<Token> tokens;
 		int position;
@@ -447,8 +420,22 @@ namespace DLS.RHDL
 
 		RhdlParser(List<Token> tokens) => this.tokens = tokens;
 
+		// u8(x) and friends still widen a value, as in RHDL 1.0.
+		public static bool TryParseTypeName(string text, out int width) => RhdlLegacyParser.TryParseTypeName(text, out width);
+
+		// Sources written for RHDL 1.0 ('circuit Name(A, B) -> Y:') still build.
+		public static bool IsLegacySource(string source) => source != null && LegacyHeader.IsMatch(source);
+
 		public static ModuleSyntax Parse(string source)
 		{
+			if (IsLegacySource(source))
+			{
+				ModuleSyntax legacy = RhdlLegacyParser.Parse(source);
+				legacy.Legacy = true;
+				foreach (CircuitSyntax circuit in legacy.Circuits) circuit.Legacy = true;
+				return legacy;
+			}
+
 			RhdlParser parser = new(RhdlLexer.Tokenize(source));
 			return parser.ParseModule();
 		}
@@ -476,13 +463,18 @@ namespace DLS.RHDL
 			throw Error(Current, $"Expected '{op}'{(what == null ? string.Empty : " " + what)} but found {Current}.");
 		}
 
-		Token ExpectKind(TokenKind kind, string message)
+		Token ExpectName(string message)
 		{
-			if (Current.Kind == kind) return Advance();
+			if (Current.Kind == TokenKind.Name && !IsReserved(Current.Text)) return Advance();
+			if (Current.Kind == TokenKind.Name) throw Error(Current, $"'{Current.Text}' is a keyword and cannot be used as a name.");
 			throw Error(Current, message + $" Found {Current}.");
 		}
 
 		static RhdlSyntaxException Error(Token token, string message) => new(token.Line, token.Column, message);
+
+		bool AtLineEnd => Current.Kind == TokenKind.Newline || Current.Kind == TokenKind.End;
+
+		// ---- File and chip ----
 
 		ModuleSyntax ParseModule()
 		{
@@ -495,142 +487,65 @@ namespace DLS.RHDL
 					continue;
 				}
 
-				if (Current.Kind == TokenKind.Indent)
+				if (Current.Is("chip"))
 				{
-					throw Error(Current, "Unexpected indentation. Only lines inside a circuit are indented.");
-				}
-
-				if (Current.Is("circuit"))
-				{
-					module.Circuits.Add(ParseCircuit());
+					module.Circuits.Add(ParseChip(module));
 					continue;
 				}
 
-				if (Current.Kind == TokenKind.String)
+				if (Current.Is("const"))
 				{
-					// A module docstring.
-					Advance();
-					ExpectKind(TokenKind.Newline, "Expected the end of the line after the text.");
+					module.Constants.Add(ParseConstant());
 					continue;
 				}
 
 				if (Current.Kind == TokenKind.Name && Peek().Is("="))
 				{
-					Statement statement = ParseSimpleStatement();
-					module.Constants.Add((AssignStatement)statement);
+					module.Constants.Add(ParseConstant());
 					continue;
 				}
 
-				if (Current.Is("end"))
+				if (Current.Is("circuit") || Current.Is("def") || Current.Is("module") || Current.Is("entity"))
 				{
-					throw Error(Current, "RHDL no longer uses 'end': a circuit ends where its indented block ends.");
+					throw Error(Current, $"Start a chip with 'chip Name', not '{Current.Text}'.");
 				}
 
-				if (Current.Is("def") || Current.Is("chip") || Current.Is("module"))
+				if (Current.Is("in") || Current.Is("out") || Current.Is("input") || Current.Is("output"))
 				{
-					throw Error(Current, $"Use 'circuit Name(inputs) -> (outputs):' instead of '{Current.Text}'.");
+					throw Error(Current, "Pins belong to a chip. Write 'chip Name' on the line above.");
 				}
 
-				throw Error(Current, "Expected 'circuit Name(inputs) -> (outputs):' or a constant such as 'WIDTH = 4'.");
+				throw Error(Current, "Expected 'chip Name' or a constant such as 'const WIDTH = 4'.");
 			}
 
 			return module;
 		}
 
-		CircuitSyntax ParseCircuit()
+		AssignStatement ParseConstant()
 		{
-			Token keyword = Expect("circuit");
-			Token name = ExpectKind(TokenKind.Name, "Expected the circuit's name after 'circuit'.");
-			CircuitSyntax circuit = new() { Name = name.Text, Line = keyword.Line, Column = keyword.Column };
-
-			if (!Current.Is("("))
-			{
-				throw Error(Current, $"Expected '(' with the inputs, as in 'circuit {name.Text}(A, B) -> Y:'.");
-			}
-
-			circuit.Inputs = ParsePortList();
-
-			if (Accept("->"))
-			{
-				circuit.Outputs = Current.Is("(") ? ParsePortList() : new List<PortSyntax> { ParsePort() };
-			}
-
-			Expect(":", "at the end of the circuit header");
-			circuit.Body = ParseBlock(out circuit.Doc);
-			return circuit;
+			Accept("const");
+			Token name = ExpectName("Expected the constant's name after 'const'.");
+			Expect("=", "after the constant's name");
+			AssignStatement constant = new() { Line = name.Line, Column = name.Column, Value = ParseExpression() };
+			constant.Targets.Add(new NameExpr { Name = name.Text, Line = name.Line, Column = name.Column });
+			EndStatement();
+			return constant;
 		}
 
-		List<PortSyntax> ParsePortList()
+		CircuitSyntax ParseChip(ModuleSyntax module)
 		{
-			Expect("(");
-			List<PortSyntax> ports = new();
-			while (!Current.Is(")"))
+			Token keyword = Expect("chip");
+			Token name = ExpectName("Expected the chip's name after 'chip', as in 'chip Adder'.");
+			CircuitSyntax chip = new() { Name = name.Text, Line = keyword.Line, Column = keyword.Column };
+			if (Current.Is("("))
 			{
-				ports.Add(ParsePort());
-				if (!Accept(",")) break;
+				throw Error(Current, $"Pins go on their own lines: 'chip {name.Text}', then 'in A, B' and 'out Y'.");
 			}
 
-			Expect(")", "to close the pin list");
-			return ports;
-		}
+			Accept(":");
+			EndStatement();
 
-		PortSyntax ParsePort()
-		{
-			Token name = ExpectKind(TokenKind.Name, "Expected a pin name.");
-			PortSyntax port = new() { Name = name.Text, Line = name.Line, Column = name.Column };
-			// In 'circuit X(A) -> Y:' the colon ends the header; it only starts a type when a
-			// type name follows.
-			if (Current.Is(":") && Peek().Kind == TokenKind.Name && TryParseTypeName(Peek().Text, out _))
-			{
-				Advance();
-				port.Width = ParseType();
-			}
-			else if (Current.Is(":") && Peek().Kind == TokenKind.Name)
-			{
-				throw Error(Peek(), $"Unknown type '{Peek().Text}'. Use bit, u4 or u8.");
-			}
-			return port;
-		}
-
-		// bit, u1 ... u32
-		int ParseType()
-		{
-			Token type = ExpectKind(TokenKind.Name, "Expected a type such as bit, u4 or u8.");
-			if (TryParseTypeName(type.Text, out int width)) return width;
-			throw Error(type, $"Unknown type '{type.Text}'. Use bit, u4, u8 or another uN up to u{MaxWidth}.");
-		}
-
-		public static bool TryParseTypeName(string text, out int width)
-		{
-			width = 0;
-			if (text == "bit")
-			{
-				width = 1;
-				return true;
-			}
-
-			if (text.Length >= 2 && text[0] == 'u' && int.TryParse(text.Substring(1), NumberStyles.None, CultureInfo.InvariantCulture, out width))
-			{
-				return width >= 1 && width <= MaxWidth && text[1] != '0';
-			}
-
-			return false;
-		}
-
-		List<Statement> ParseBlock(out string doc)
-		{
-			doc = null;
-			ExpectKind(TokenKind.Newline, "Expected a new line after ':'.");
-			ExpectKind(TokenKind.Indent, "Expected an indented block after ':'.");
-
-			if (Current.Kind == TokenKind.String)
-			{
-				doc = Advance().Text.Trim();
-				ExpectKind(TokenKind.Newline, "Expected the end of the line after the text.");
-			}
-
-			List<Statement> body = new();
-			while (Current.Kind != TokenKind.Dedent && Current.Kind != TokenKind.End)
+			while (Current.Kind != TokenKind.End && !Current.Is("chip"))
 			{
 				if (Current.Kind == TokenKind.Newline)
 				{
@@ -638,13 +553,81 @@ namespace DLS.RHDL
 					continue;
 				}
 
+				if (Current.Is("end"))
+				{
+					// An optional 'end' (or 'end chip') closes the chip.
+					Advance();
+					if (Current.Is("chip") || Current.Is(chip.Name)) Advance();
+					EndStatement();
+					break;
+				}
+
+				if (Current.Is("in") || Current.Is("out"))
+				{
+					bool input = Advance().Text == "in";
+					(input ? chip.Inputs : chip.Outputs).AddRange(ParsePins());
+					EndStatement();
+					continue;
+				}
+
+				if (Current.Is("input") || Current.Is("inputs") || Current.Is("output") || Current.Is("outputs"))
+				{
+					throw Error(Current, $"Write '{(Current.Text.StartsWith("in") ? "in" : "out")}' followed by the pin names, e.g. 'in A, B'.");
+				}
+
+				if (Current.Is("const"))
+				{
+					module.Constants.Add(ParseConstant());
+					continue;
+				}
+
 				Statement statement = ParseStatement();
-				if (statement != null) body.Add(statement);
+				if (statement != null) chip.Body.Add(statement);
 			}
 
-			if (Current.Kind == TokenKind.Dedent) Advance();
-			return body;
+			return chip;
 		}
+
+		List<PortSyntax> ParsePins()
+		{
+			List<PortSyntax> pins = new();
+			do
+			{
+				Token name = ExpectName("Expected a pin name.");
+				PortSyntax pin = new() { Name = name.Text, Line = name.Line, Column = name.Column };
+				if (Accept(":")) pin.Width = ParseWidth();
+				pins.Add(pin);
+			} while (Accept(",") && !AtLineEnd);
+
+			return pins;
+		}
+
+		// The number of bits after ':', as in 'A: 8'.
+		int ParseWidth()
+		{
+			Token token = Current;
+			if (token.Kind == TokenKind.Number)
+			{
+				Advance();
+				if (token.Value < 1 || token.Value > MaxWidth)
+				{
+					throw Error(token, $"A signal has 1 to {MaxWidth} bits, not {token.Text}.");
+				}
+
+				return (int)token.Value;
+			}
+
+			if (token.Kind == TokenKind.Name && (RhdlLegacyParser.TryParseTypeName(token.Text, out int width) || token.Text == "bits"))
+			{
+				throw Error(token, width > 0
+					? $"Write the number of bits after ':', e.g. ': {width}'."
+					: "Write the number of bits after ':', e.g. 'A: 8'.");
+			}
+
+			throw Error(token, "Expected the number of bits after ':', e.g. 'A: 8'.");
+		}
+
+		// ---- Statements ----
 
 		Statement ParseStatement()
 		{
@@ -652,68 +635,72 @@ namespace DLS.RHDL
 
 			if (start.Is("for")) return ParseFor();
 
-			if (start.Is("pass"))
+			if (start.Is("wire")) return ParseWire();
+
+			if (start.Is("if") || start.Is("while") || start.Is("elif"))
 			{
+				throw Error(start, $"'{start.Text}' cannot start a line: all lines are hardware that works at the same time. " +
+				                   "Choose between values with 'Y = if select then A else B'.");
+			}
+
+			if (start.Is("else") || start.Is("then"))
+			{
+				throw Error(start, $"'{start.Text}' belongs to a choice such as 'Y = if select then A else B'.");
+			}
+
+			if (start.Is("return") || start.Is("def") || start.Is("import") || start.Is("class"))
+			{
+				throw Error(start, $"'{start.Text}' is not part of RHDL. Give each output a value by name, e.g. 'Y = A and B'.");
+			}
+
+			if (start.Kind == TokenKind.Name && Peek().Is(":"))
+			{
+				// 'name: 8' declares a wire, like 'wire name: 8'.
 				Advance();
-				ExpectKind(TokenKind.Newline, "Expected the end of the line after 'pass'.");
-				return null;
-			}
-
-			if (start.Kind == TokenKind.String)
-			{
-				// Stray text, like a docstring further down the body.
-				Advance();
-				ExpectKind(TokenKind.Newline, "Expected the end of the line after the text.");
-				return null;
-			}
-
-			if (start.Is("if") || start.Is("while") || start.Is("else") || start.Is("elif"))
-			{
-				throw Error(start, $"'{start.Text}' blocks would run in sequence, but hardware runs all at once. " +
-				                   "Choose between values with 'a if select else b'.");
-			}
-
-			if (start.Is("circuit"))
-			{
-				throw Error(start, "A circuit cannot be defined inside another circuit. Write each circuit in its own file.");
-			}
-
-			if (start.Is("return") || start.Is("import") || start.Is("def") || start.Is("class") || start.Is("end"))
-			{
-				throw Error(start, $"'{start.Text}' is not part of RHDL. Assign outputs by name, e.g. 'Y = A & B'.");
+				return ParseDeclaration(start);
 			}
 
 			return ParseSimpleStatement();
 		}
 
+		Statement ParseWire()
+		{
+			Advance();
+			Token name = ExpectName("Expected a name after 'wire', as in 'wire total: 8'.");
+			if (Current.Is("="))
+			{
+				// 'wire t = A and B' is the same as 't = A and B'.
+				Advance();
+				AssignStatement plain = new() { Line = name.Line, Column = name.Column, Value = ParseExpression() };
+				plain.Targets.Add(new NameExpr { Name = name.Text, Line = name.Line, Column = name.Column });
+				EndStatement();
+				return plain;
+			}
+
+			if (!Current.Is(":")) throw Error(Current, $"Give the wire a width or a value: 'wire {name.Text}: 8' or 'wire {name.Text} = ...'.");
+			return ParseDeclaration(name);
+		}
+
+		Statement ParseDeclaration(Token name)
+		{
+			if (IsReserved(name.Text)) throw Error(name, $"'{name.Text}' is a keyword and cannot be used as a name.");
+			Expect(":");
+			int width = ParseWidth();
+			if (Accept("="))
+			{
+				AssignStatement annotated = new() { Line = name.Line, Column = name.Column, AnnotatedWidth = width, Value = ParseExpression() };
+				annotated.Targets.Add(new NameExpr { Name = name.Text, Line = name.Line, Column = name.Column });
+				EndStatement();
+				return annotated;
+			}
+
+			EndStatement();
+			return new DeclareStatement { Name = name.Text, Width = width, Line = name.Line, Column = name.Column };
+		}
+
 		Statement ParseSimpleStatement()
 		{
 			Token start = Current;
-
-			// NAME: type [= value]
-			if (start.Kind == TokenKind.Name && Peek().Is(":"))
-			{
-				Advance();
-				Advance();
-				int width = ParseType();
-				if (Accept("="))
-				{
-					AssignStatement annotated = new()
-					{
-						Line = start.Line,
-						Column = start.Column,
-						AnnotatedWidth = width,
-						Value = ParseExpression()
-					};
-					annotated.Targets.Add(new NameExpr { Name = start.Text, Line = start.Line, Column = start.Column });
-					EndStatement();
-					return annotated;
-				}
-
-				EndStatement();
-				return new DeclareStatement { Name = start.Text, Width = width, Line = start.Line, Column = start.Column };
-			}
-
 			Expr first = ParseExpression();
 			if (Current.Is(",") || Current.Is("="))
 			{
@@ -725,16 +712,11 @@ namespace DLS.RHDL
 					assign.Targets.Add(ParseExpression());
 				}
 
-				if (Current.Is("=") && Peek().Is("="))
-				{
-					throw Error(Current, "Use a single '=' to drive a signal; '==' compares two values.");
-				}
-
 				Expect("=", "after the signal names");
 				assign.Value = ParseExpression();
 				if (Current.Is("="))
 				{
-					throw Error(Current, "Chained assignments like 'a = b = c' are not supported. Assign each signal on its own line.");
+					throw Error(Current, "Write one '=' per line: 'a = b = c' is not supported.");
 				}
 
 				EndStatement();
@@ -743,7 +725,12 @@ namespace DLS.RHDL
 
 			if (Current.Kind == TokenKind.Op && Current.Text.Length == 1 && Peek().Is("=") && "&|^+-".Contains(Current.Text))
 			{
-				throw Error(Current, $"'{Current.Text}=' would change a signal after it is set. Write the full expression on one assignment.");
+				throw Error(Current, $"'{Current.Text}=' would change a signal after it is set. Write the whole expression in one line.");
+			}
+
+			if (first is BinaryExpr { Op: "==" } compare && compare.Left is NameExpr or IndexExpr or SliceExpr)
+			{
+				throw new RhdlSyntaxException(compare.Line, compare.Column, "Use a single '=' to give a signal its value; '==' compares two values.");
 			}
 
 			EndStatement();
@@ -758,48 +745,51 @@ namespace DLS.RHDL
 				return;
 			}
 
+			if (Current.Kind == TokenKind.End) return;
 			if (Current.Is(";")) throw Error(Current, "Write one statement per line; ';' is not needed.");
+			if (Current.Is("if")) throw Error(Current, "Write the choice the other way round: 'if select then A else B'.");
 			throw Error(Current, $"Unexpected {Current} after the end of the statement.");
 		}
 
 		Statement ParseFor()
 		{
 			Token keyword = Expect("for");
-			Token variable = ExpectKind(TokenKind.Name, "Expected a loop variable after 'for'.");
-			Expect("in");
-			Token range = Current;
-			if (!range.Is("range"))
+			Token variable = ExpectName("Expected a loop variable after 'for', as in 'for i in 0..7'.");
+			Expect("in", "in 'for i in 0..7'");
+			if (Current.Is("range"))
 			{
-				throw Error(range, "Loops repeat hardware a fixed number of times: use 'for i in range(4):'.");
+				throw Error(Current, "Write the first and the last number: 'for i in 0..3' repeats for 0, 1, 2 and 3.");
+			}
+
+			ForStatement loop = new() { Variable = variable.Text, Inclusive = true, Line = keyword.Line, Column = keyword.Column };
+			loop.Start = ParseExpression();
+			Expect("..", "between the first and the last number, as in 'for i in 0..7'");
+			loop.Stop = ParseExpression();
+			if (Accept("step")) loop.Step = ParseExpression();
+			Accept(":");
+			Accept("do");
+			EndStatement();
+
+			while (!Current.Is("end"))
+			{
+				if (Current.Kind == TokenKind.End || Current.Is("chip"))
+				{
+					throw Error(keyword, "This 'for' has no 'end'. Close the repeated lines with 'end'.");
+				}
+
+				if (Current.Kind == TokenKind.Newline)
+				{
+					Advance();
+					continue;
+				}
+
+				Statement statement = ParseStatement();
+				if (statement != null) loop.Body.Add(statement);
 			}
 
 			Advance();
-			Expect("(");
-			List<Expr> args = new() { ParseExpression() };
-			while (Accept(","))
-			{
-				if (Current.Is(")")) break;
-				args.Add(ParseExpression());
-			}
-
-			Expect(")");
-			if (args.Count > 3) throw Error(range, "range() takes at most three numbers: range(start, stop, step).");
-			Expect(":", "at the end of the 'for' line");
-
-			ForStatement loop = new() { Variable = variable.Text, Line = keyword.Line, Column = keyword.Column };
-			if (args.Count == 1)
-			{
-				loop.Start = new NumberExpr { Value = 0, Raw = "0", Line = range.Line, Column = range.Column };
-				loop.Stop = args[0];
-			}
-			else
-			{
-				loop.Start = args[0];
-				loop.Stop = args[1];
-				if (args.Count == 3) loop.Step = args[2];
-			}
-
-			loop.Body = ParseBlock(out _);
+			Accept("for");
+			EndStatement();
 			return loop;
 		}
 
@@ -823,21 +813,33 @@ namespace DLS.RHDL
 
 		Expr ParseExpressionInner()
 		{
-			Expr value = ParseOr();
 			if (Current.Is("if"))
 			{
 				Token keyword = Advance();
 				Expr condition = ParseOr();
-				Expect("else", "in 'a if select else b'");
-				Expr otherwise = ParseExpression();
+				Expect("then", "in 'if select then A else B'");
+				Expr whenTrue = ParseExpression();
+				if (!Current.Is("else"))
+				{
+					throw Error(Current, "A choice needs both values: 'if select then A else B'.");
+				}
+
+				Advance();
+				Expr whenFalse = ParseExpression();
 				return new ConditionalExpr
 				{
 					Condition = condition,
-					WhenTrue = value,
-					WhenFalse = otherwise,
+					WhenTrue = whenTrue,
+					WhenFalse = whenFalse,
 					Line = keyword.Line,
 					Column = keyword.Column
 				};
+			}
+
+			Expr value = ParseOr();
+			if (Current.Is("if"))
+			{
+				throw Error(Current, "Write the choice the other way round: 'if select then A else B'.");
 			}
 
 			return value;
@@ -845,11 +847,23 @@ namespace DLS.RHDL
 
 		Expr ParseOr()
 		{
-			Expr left = ParseAnd();
-			while (Current.Is("or"))
+			Expr left = ParseXor();
+			while (Current.Is("or") || Current.Is("nor") || Current.Is("|"))
 			{
 				Token op = Advance();
-				left = Binary("or", left, ParseAnd(), op);
+				left = Logic(op, "|", left, ParseXor());
+			}
+
+			return left;
+		}
+
+		Expr ParseXor()
+		{
+			Expr left = ParseAnd();
+			while (Current.Is("xor") || Current.Is("xnor") || Current.Is("^"))
+			{
+				Token op = Advance();
+				left = Logic(op, "^", left, ParseAnd());
 			}
 
 			return left;
@@ -857,42 +871,36 @@ namespace DLS.RHDL
 
 		Expr ParseAnd()
 		{
-			Expr left = ParseNot();
-			while (Current.Is("and"))
+			Expr left = ParseComparison();
+			while (Current.Is("and") || Current.Is("nand") || Current.Is("&"))
 			{
 				Token op = Advance();
-				left = Binary("and", left, ParseNot(), op);
+				left = Logic(op, "&", left, ParseComparison());
 			}
 
 			return left;
 		}
 
-		Expr ParseNot()
+		// 'nand', 'nor' and 'xnor' are the inverted forms.
+		static Expr Logic(Token op, string symbol, Expr left, Expr right)
 		{
-			if (Current.Is("not"))
-			{
-				Token op = Advance();
-				EnterNesting();
-				Expr operand = ParseNot();
-				nesting--;
-				return new UnaryExpr { Op = "not", Operand = operand, Line = op.Line, Column = op.Column };
-			}
-
-			return ParseComparison();
+			BinaryExpr binary = new() { Op = symbol, Left = left, Right = right, Line = op.Line, Column = op.Column };
+			bool inverted = op.Text is "nand" or "nor" or "xnor";
+			return inverted ? new UnaryExpr { Op = "~", Operand = binary, Line = op.Line, Column = op.Column } : binary;
 		}
 
 		static readonly string[] ComparisonOps = { "==", "!=", "<", ">", "<=", ">=" };
 
 		Expr ParseComparison()
 		{
-			Expr left = ParseBitOr();
+			Expr left = ParseShift();
 			if (IsComparison(Current))
 			{
 				Token op = Advance();
-				Expr right = ParseBitOr();
+				Expr right = ParseShift();
 				if (IsComparison(Current))
 				{
-					throw Error(Current, "Chained comparisons are not supported. Combine them with 'and': (a < b) and (b < c).");
+					throw Error(Current, "Compare two values at a time and join the results with 'and': (a < b) and (b < c).");
 				}
 
 				return Binary(op.Text, left, right, op);
@@ -901,42 +909,6 @@ namespace DLS.RHDL
 			return left;
 
 			static bool IsComparison(Token token) => token.Kind == TokenKind.Op && Array.IndexOf(ComparisonOps, token.Text) >= 0;
-		}
-
-		Expr ParseBitOr()
-		{
-			Expr left = ParseBitXor();
-			while (Current.Is("|"))
-			{
-				Token op = Advance();
-				left = Binary("|", left, ParseBitXor(), op);
-			}
-
-			return left;
-		}
-
-		Expr ParseBitXor()
-		{
-			Expr left = ParseBitAnd();
-			while (Current.Is("^"))
-			{
-				Token op = Advance();
-				left = Binary("^", left, ParseBitAnd(), op);
-			}
-
-			return left;
-		}
-
-		Expr ParseBitAnd()
-		{
-			Expr left = ParseShift();
-			while (Current.Is("&"))
-			{
-				Token op = Advance();
-				left = Binary("&", left, ParseShift(), op);
-			}
-
-			return left;
 		}
 
 		Expr ParseShift()
@@ -965,8 +937,8 @@ namespace DLS.RHDL
 
 				if (Current.Is("*") || Current.Is("/") || Current.Is("//") || Current.Is("%") || Current.Is("**"))
 				{
-					throw Error(Current, $"'{Current.Text}' is not supported: RHDL only builds adders and subtractors. " +
-					                     "Multiply by a constant power of two with '<<'.");
+					throw Error(Current, $"'{Current.Text}' is not supported: RHDL builds adders and subtractors only. " +
+					                     "Multiply by 2, 4, 8 ... with '<<'.");
 				}
 
 				return left;
@@ -975,19 +947,14 @@ namespace DLS.RHDL
 
 		Expr ParseUnary()
 		{
-			if (Current.Is("~") || Current.Is("-") || Current.Is("+"))
+			if (Current.Is("not") || Current.Is("~") || Current.Is("!") || Current.Is("-") || Current.Is("+"))
 			{
 				Token op = Advance();
 				EnterNesting();
 				Expr operand = ParseUnary();
 				nesting--;
 				if (op.Text == "+") return operand;
-				return new UnaryExpr { Op = op.Text, Operand = operand, Line = op.Line, Column = op.Column };
-			}
-
-			if (Current.Is("!"))
-			{
-				throw Error(Current, "Use '~' to invert bits, or 'not' for a single bit.");
+				return new UnaryExpr { Op = op.Text == "-" ? "-" : "~", Operand = operand, Line = op.Line, Column = op.Column };
 			}
 
 			return ParsePostfix();
@@ -1008,19 +975,21 @@ namespace DLS.RHDL
 				if (token.Is("["))
 				{
 					Advance();
-					Expr low = null;
-					if (!Current.Is(":")) low = ParseExpression();
-					if (Accept(":"))
+					Expr low = Current.Is("..") ? null : ParseExpression();
+					if (Accept(".."))
 					{
 						Expr high = Current.Is("]") ? null : ParseExpression();
-						if (Current.Is(":")) throw Error(Current, "Slices with a step are not supported.");
-						Expect("]");
-						value = new SliceExpr { Target = value, Low = low, High = high, Line = token.Line, Column = token.Column };
+						Expect("]", "to close the bits");
+						value = new SliceExpr { Target = value, Low = low, High = high, Inclusive = true, Line = token.Line, Column = token.Column };
 					}
 					else
 					{
-						if (Current.Is(",")) throw Error(Current, "Use a slice such as A[0:4] to select several bits.");
-						Expect("]");
+						if (Current.Is(":") || Current.Is(","))
+						{
+							throw Error(Current, "Select several bits with '..': A[0..3] is bits 0, 1, 2 and 3.");
+						}
+
+						Expect("]", "to close the bit number");
 						value = new IndexExpr { Target = value, Index = low, Line = token.Line, Column = token.Column };
 					}
 
@@ -1030,7 +999,8 @@ namespace DLS.RHDL
 				if (token.Is("."))
 				{
 					Advance();
-					Token name = ExpectKind(TokenKind.Name, "Expected a pin name after '.'.");
+					if (Current.Kind != TokenKind.Name) throw Error(Current, "Expected a pin name after '.'.");
+					Token name = Advance();
 					value = new AttributeExpr { Target = value, Name = name.Text, Line = name.Line, Column = name.Column };
 					continue;
 				}
@@ -1046,9 +1016,10 @@ namespace DLS.RHDL
 			bool sawKeyword = false;
 			while (!Current.Is(")"))
 			{
+				if (Current.Kind == TokenKind.End) throw Error(open, "This '(' is never closed.");
 				Token start = Current;
 				CallArgument argument = new() { Line = start.Line, Column = start.Column };
-				if (start.Kind == TokenKind.Name && Peek().Is("=") && !Peek(2).Is("="))
+				if (start.Kind == TokenKind.Name && Peek().Is("="))
 				{
 					Advance();
 					Advance();
@@ -1065,12 +1036,8 @@ namespace DLS.RHDL
 				if (!Accept(",")) break;
 			}
 
-			if (Current.Kind == TokenKind.End || Current.Kind == TokenKind.Newline)
-			{
-				throw Error(open, "This '(' is never closed.");
-			}
-
-			Expect(")", "to close the call");
+			if (Current.Kind == TokenKind.End) throw Error(open, "This '(' is never closed.");
+			Expect(")", "to close the brackets");
 			return call;
 		}
 
@@ -1085,23 +1052,25 @@ namespace DLS.RHDL
 					{
 						Value = token.Value,
 						Raw = token.Text,
-						SpelledWidth = SpelledWidth(token.Text),
+						SpelledWidth = RhdlLexer.SpelledWidth(token.Text),
 						Line = token.Line,
 						Column = token.Column
 					};
 
 				case TokenKind.Name:
+					if (token.Text is "true" or "false" or "True" or "False")
+					{
+						Advance();
+						bool on = token.Text is "true" or "True";
+						return new NumberExpr { Value = on ? 1 : 0, Raw = on ? "1" : "0", SpelledWidth = 1, Line = token.Line, Column = token.Column };
+					}
+
 					if (IsReserved(token.Text))
 					{
 						throw Error(token, $"Expected a value but found the keyword '{token.Text}'.");
 					}
 
 					Advance();
-					if (token.Text == "True" || token.Text == "False")
-					{
-						return new NumberExpr { Value = token.Text == "True" ? 1 : 0, Raw = token.Text, SpelledWidth = 1, Line = token.Line, Column = token.Column };
-					}
-
 					return new NameExpr { Name = token.Text, Line = token.Line, Column = token.Column };
 
 				case TokenKind.Op when token.Text == "(":
@@ -1110,29 +1079,15 @@ namespace DLS.RHDL
 					Expr inner = ParseExpression();
 					if (Current.Is(","))
 					{
-						throw Error(Current, "Tuples are only used on the left of '=' to unpack a component's outputs.");
+						throw Error(Current, "Brackets hold one value. To join bits into a bus, write join(high, low).");
 					}
 
 					Expect(")", "to close the bracket");
 					return inner;
 				}
 
-				case TokenKind.Op when token.Text == "[":
-				{
-					Advance();
-					ListExpr list = new() { Line = token.Line, Column = token.Column };
-					while (!Current.Is("]"))
-					{
-						list.Items.Add(ParseExpression());
-						if (!Accept(",")) break;
-					}
-
-					Expect("]", "to close the list");
-					return list;
-				}
-
-				case TokenKind.String:
-					throw Error(token, "Text can only be used as a docstring, on its own line.");
+				case TokenKind.Op when token.Text == "{":
+					throw Error(token, "Join bits into a bus with join(high, low).");
 
 				case TokenKind.Newline:
 				case TokenKind.End:
@@ -1143,22 +1098,10 @@ namespace DLS.RHDL
 			}
 		}
 
-		static bool IsReserved(string name) => name is
-			"circuit" or "for" or "in" or "if" or "else" or "and" or "or" or "not" or "pass" or
-			"while" or "def" or "return" or "import" or "class" or "elif" or "lambda" or "end";
-
-		static int SpelledWidth(string raw)
-		{
-			string digits = raw.Replace("_", string.Empty);
-			if (digits.Length > 2 && digits[0] == '0')
-			{
-				char prefix = char.ToLowerInvariant(digits[1]);
-				if (prefix == 'b') return digits.Length - 2;
-				if (prefix == 'x') return (digits.Length - 2) * 4;
-			}
-
-			return 0;
-		}
+		internal static bool IsReserved(string name) => name is
+			"chip" or "in" or "out" or "wire" or "const" or "for" or "end" or
+			"if" or "then" or "else" or "and" or "or" or "xor" or "nand" or "nor" or "xnor" or "not" or
+			"true" or "false";
 
 		static BinaryExpr Binary(string op, Expr left, Expr right, Token token) =>
 			new() { Op = op, Left = left, Right = right, Line = token.Line, Column = token.Column };

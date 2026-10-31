@@ -17,28 +17,40 @@ namespace DLS.Tests
 	public class AccelerationEquivalenceTests
 	{
 		const string Alu4Source = @"
-circuit Alu4(A: u4, B: u4, OP0, OP1) -> (Y: u4, EQ, LT):
-    Y = ((A - B) if OP0 else (A + B)) if OP1 else ((A ^ B) if OP0 else (A & B))
+chip Alu4
+    in A: 4, B: 4, OP0, OP1
+    out Y: 4, EQ, LT
+
+    Y = if OP1 then (if OP0 then A - B else A + B) else if OP0 then A xor B else A and B
     EQ = A == B
     LT = A < B
 ";
 
 		// Same pins as Alu4 but different logic, so its LUT fingerprint differs.
 		const string Alu4VariantSource = @"
-circuit Alu4(A: u4, B: u4, OP0, OP1) -> (Y: u4, EQ, LT):
-    Y = ((A - B) if OP0 else (A + B)) if OP1 else ((A | B) if OP0 else (A & B))
+chip Alu4
+    in A: 4, B: 4, OP0, OP1
+    out Y: 4, EQ, LT
+
+    Y = if OP1 then (if OP0 then A - B else A + B) else if OP0 then A or B else A and B
     EQ = A == B
     LT = B < A
 ";
 
 		// The root chip is never collapsed, so the chip under test sits one level down.
 		const string AluHarnessSource = @"
-circuit AluHarness(A: u4, B: u4, OP0, OP1) -> (Y: u4, EQ, LT):
+chip AluHarness
+    in A: 4, B: 4, OP0, OP1
+    out Y: 4, EQ, LT
+
     Y, EQ, LT = Alu4(A, B, OP0, OP1)
 ";
 
 		const string Reg4HarnessSource = @"
-circuit Reg4Harness(D: u4, WE, CLK, RESET) -> Q: u4:
+chip Reg4Harness
+    in D: 4, WE, CLK, RESET
+    out Q: 4
+
     Q = Reg4(D, WE, CLK, RESET)
 ";
 
@@ -97,14 +109,20 @@ circuit Reg4Harness(D: u4, WE, CLK, RESET) -> Q: u4:
 		// Three 4-bit operands and two select bits give 16384 LUT entries, enough for the
 		// build to be split across threads on a machine with four or more cores.
 		const string Mix3Source = @"
-circuit Mix3(A: u4, B: u4, C: u4, OP0, OP1) -> (Y: u4, EQ, LT):
-    Y = ((A - B) if OP0 else (B + C)) if OP1 else ((A ^ B) if OP0 else (A & C))
+chip Mix3
+    in A: 4, B: 4, C: 4, OP0, OP1
+    out Y: 4, EQ, LT
+
+    Y = if OP1 then (if OP0 then A - B else B + C) else if OP0 then A xor B else A and C
     EQ = A == C
     LT = B < C
 ";
 
 		const string Mix3HarnessSource = @"
-circuit Mix3Harness(A: u4, B: u4, C: u4, OP0, OP1) -> (Y: u4, EQ, LT):
+chip Mix3Harness
+    in A: 4, B: 4, C: 4, OP0, OP1
+    out Y: 4, EQ, LT
+
     Y, EQ, LT = Mix3(A, B, C, OP0, OP1)
 ";
 
