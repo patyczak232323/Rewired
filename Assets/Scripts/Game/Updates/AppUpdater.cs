@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -47,6 +48,7 @@ namespace DLS.Game.Updates
 		static string downloadDir;
 		static string stagingDir;
 		static long expectedDownloadSize;
+		static string expectedSha256;
 		static string stagedExecutable;
 		static AndroidJavaClass androidInstaller;
 		static string androidStatus = string.Empty;
@@ -108,6 +110,7 @@ namespace DLS.Game.Updates
 
 			UpdatePlatform platform = Platform;
 			bool hasAsset = latest.TryGetAsset(platform, out string assetUrl, out long assetSize);
+			expectedSha256 = latest.TryGetSha256(platform, out string sha256) ? sha256 : null;
 
 			if (platform == UpdatePlatform.Android && hasAsset)
 			{
@@ -190,6 +193,14 @@ namespace DLS.Game.Updates
 			if (expectedDownloadSize > 0 && downloadedSize != expectedDownloadSize)
 			{
 				Fail($"the download is incomplete ({downloadedSize} of {expectedDownloadSize} bytes)");
+				return;
+			}
+
+			// GitHub publishes a SHA-256 for each release asset; a mismatch means the file was
+			// damaged or replaced on the way. (Android also checks the APK's signature.)
+			if (expectedSha256 != null && !string.Equals(ComputeSha256(zipPath), expectedSha256, StringComparison.Ordinal))
+			{
+				Fail("the download does not match the release's checksum");
 				return;
 			}
 
@@ -276,6 +287,13 @@ namespace DLS.Game.Updates
 				using FileStream destination = File.Create(path);
 				source.CopyTo(destination);
 			}
+		}
+
+		public static string ComputeSha256(string path)
+		{
+			using SHA256 sha = SHA256.Create();
+			using FileStream stream = File.OpenRead(path);
+			return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
 		}
 
 		static void Fail(string message)

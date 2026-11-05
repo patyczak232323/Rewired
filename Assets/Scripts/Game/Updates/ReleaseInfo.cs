@@ -26,6 +26,10 @@ namespace DLS.Game.Updates
 		public string PageUrl;
 		public readonly Dictionary<string, (string url, long size)> Assets = new(StringComparer.Ordinal);
 
+		// SHA-256 of each asset (lowercase hex), from the "digest" field GitHub adds to release
+		// assets ("sha256:<hex>"). Releases published before GitHub added it have none.
+		public readonly Dictionary<string, string> Sha256 = new(StringComparer.Ordinal);
+
 		// File names of the release assets, as published by .github/workflows/release.yml.
 		public static string AssetName(UpdatePlatform platform) => platform switch
 		{
@@ -56,6 +60,7 @@ namespace DLS.Game.Updates
 					string url = (string)asset["browser_download_url"];
 					if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(url)) continue;
 					release.Assets[name] = (url, (long?)asset["size"] ?? 0);
+					if (TryParseSha256((string)asset["digest"], out string sha256)) release.Sha256[name] = sha256;
 				}
 			}
 
@@ -69,6 +74,29 @@ namespace DLS.Game.Updates
 			string name = AssetName(platform);
 			if (name == null || !Assets.TryGetValue(name, out (string url, long size) asset)) return false;
 			(url, size) = asset;
+			return true;
+		}
+
+		public bool TryGetSha256(UpdatePlatform platform, out string sha256)
+		{
+			sha256 = null;
+			string name = AssetName(platform);
+			return name != null && Sha256.TryGetValue(name, out sha256);
+		}
+
+		static bool TryParseSha256(string digest, out string sha256)
+		{
+			sha256 = null;
+			const string prefix = "sha256:";
+			if (digest == null || !digest.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
+			string hex = digest.Substring(prefix.Length).Trim().ToLowerInvariant();
+			if (hex.Length != 64) return false;
+			foreach (char c in hex)
+			{
+				if (!(c is >= '0' and <= '9' or >= 'a' and <= 'f')) return false;
+			}
+
+			sha256 = hex;
 			return true;
 		}
 
