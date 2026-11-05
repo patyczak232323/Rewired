@@ -124,6 +124,24 @@ namespace DLS.Tests
 			Assert.Throws<InvalidDataException>(() => SavePaths.CombineContained(SavePaths.ProjectsPath, name));
 		}
 
+		[TestCase("../../../outside")]
+		[TestCase("..\\..\\outside")]
+		public void RhdlSourcesStayInsideTheProject(string chipName)
+		{
+			// A chip's name comes from its JSON file, which need not match the file name.
+			Assert.Throws<InvalidDataException>(() => DLS.RHDL.RhdlSourceStore.GetSourcePath(projectName, chipName));
+			Assert.IsFalse(DLS.RHDL.RhdlSourceStore.HasChipSource(projectName, chipName));
+		}
+
+		[Test]
+		public void RhdlSourceIsReplacedWhenSavedAgain()
+		{
+			DLS.RHDL.RhdlSourceStore.SaveChipSource(projectName, "Adder", "first");
+			DLS.RHDL.RhdlSourceStore.SaveChipSource(projectName, "Adder", "second");
+			Assert.AreEqual("second", DLS.RHDL.RhdlSourceStore.LoadChipSource(projectName, "Adder"));
+			Assert.IsFalse(File.Exists(DLS.RHDL.RhdlSourceStore.GetSourcePath(projectName, "Adder") + ".tmp"));
+		}
+
 		[Test]
 		public void OrdinaryNamesStayInsideTheirFolder()
 		{
