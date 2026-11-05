@@ -164,8 +164,8 @@ namespace DLS.Graphics
 			float displayHeight = Mathf.Max(4f, rightY - edgePad);
 			DrawDisplaysPanel(theme, new Vector2(rightX, rightY), rightContentWidth, displayHeight);
 
-			// Cancel
-			if (cancelConfirmButtonIndex == 0)
+			// Cancel (also Escape, and BACK on a phone, which used to do nothing here)
+			if (cancelConfirmButtonIndex == 0 || (KeyboardShortcuts.CancelShortcutTriggered && !CustomizationSceneDrawer.DisplayBusyThisFrame))
 			{
 				RevertChanges();
 				UIDrawer.SetActiveMenu(UIDrawer.MenuType.ChipSave);

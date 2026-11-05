@@ -35,9 +35,9 @@ namespace DLS.Graphics
 
 		static string notice;
 		static bool noticeIsGood;
+		static float noticeUntil;
 		static string screenTitle;
 		static string screenInfo;
-		static float noticeUntil;
 		static UIDrawer.MenuType lastMenu;
 		static string chipNameWhenSaveOpened;
 		static bool unsavedWhenSaveOpened;
