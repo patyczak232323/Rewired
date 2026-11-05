@@ -27,7 +27,7 @@ namespace DLS.Graphics
 			"RHDL STUDIO",
 			"SIM DIAGNOSTICS",
 			"EXPORT",
-			"QUIT"
+			"MAIN MENU"
 		};
 
 		const int NewChipButtonIndex = 0;
@@ -137,8 +137,11 @@ namespace DLS.Graphics
 					pos = buttonBounds.TopLeft;
 				}
 
+				// The same frame as the other menus: an accent line along the top.
 				Bounds2D uiBounds = UI.GetCurrentBoundsScope();
-				UI.ModifyPanel(panelID, uiBounds.Centre, uiBounds.Size + Vector2.one * (buttonSpacing * 2), Color.white);
+				Bounds2D panelBounds = Bounds2D.Grow(uiBounds, buttonSpacing * 2);
+				UI.ModifyPanel(panelID, panelBounds, RewiredUI.SurfaceRaised);
+				RewiredUI.DrawFrame(panelBounds);
 			}
 
 			// Close if clicked nothing or pressed esc
@@ -167,6 +170,30 @@ namespace DLS.Graphics
 				else if (i == ExportButtonIndex) ExportMenu.Open(Project.ActiveProject.ActiveDevChipName);
 				else if (i == QuitButtonIndex) ExitToMainMenu();
 			}
+		}
+
+		// The project and chip being edited, and whether the chip has unsaved changes, at the right
+		// end of the bar. Returns where the status starts, so the chip buttons stop before it.
+		static float DrawChipStatus(Project project)
+		{
+			DrawSettings.UIThemeDLS theme = DrawSettings.ActiveUITheme;
+			const float scale = 0.72f;
+			const float gap = 1.2f;
+			float right = UI.Width - 1f;
+			float y = barHeight / 2;
+
+			bool unsaved = project.CanEditViewedChip && RewiredUI.ActiveChipHasUnsavedChanges(project);
+			if (unsaved)
+			{
+				const string mark = "NOT SAVED";
+				UI.DrawText(mark, theme.FontBold, theme.FontSizeRegular * scale, new Vector2(right, y), Anchor.TextCentreRight, RewiredUI.UnsavedText);
+				right -= MobileTheme.TextWidth(mark, scale, true) + gap;
+			}
+
+			string chipName = string.IsNullOrWhiteSpace(project.ActiveDevChipName) ? "NEW CHIP" : project.ActiveDevChipName;
+			string name = MobileTheme.Fit(project.description.ProjectName + "  /  " + chipName, UI.Width * 0.3f, scale);
+			UI.DrawText(name, theme.FontRegular, theme.FontSizeRegular * scale, new Vector2(right, y), Anchor.TextCentreRight, new Color(1, 1, 1, 0.5f));
+			return right - MobileTheme.TextWidth(name, scale) - gap;
 		}
 
 		static string GetMenuShortcutText(int buttonIndex)
@@ -203,6 +230,7 @@ namespace DLS.Graphics
 
 			UI.DrawPanel(bounds_UISpace, theme.StarredBarCol);
 			UI.DrawLine(bounds_UISpace.TopLeft, bounds_UISpace.TopRight, 0.06f, RewiredUI.Accent * 0.75f);
+			float statusLeft = DrawChipStatus(project);
 
 			// Menu toggle button
 			Vector2 menuButtonPos = new(buttonSpacing, padY);
@@ -219,7 +247,7 @@ namespace DLS.Graphics
 			// Chips
 			ButtonTheme buttonTheme = theme.ChipButton;
 
-			using (UI.CreateMaskScopeMinMax(new Vector2(UI.PrevBounds.Right + buttonSpacing, 0), new Vector2(UI.Width, barHeight)))
+			using (UI.CreateMaskScopeMinMax(new Vector2(UI.PrevBounds.Right + buttonSpacing, 0), new Vector2(statusLeft, barHeight)))
 			{
 				bool chipButtonsEnabled = !inOtherMenu && project.CanEditViewedChip;
 
@@ -248,7 +276,7 @@ namespace DLS.Graphics
 
 				// -- Draw --
 				float chipButtonsRegionStartX = UI.PrevBounds.Right + buttonSpacing;
-				float chipButtonRegionWidth = UI.Width - chipButtonsRegionStartX;
+				float chipButtonRegionWidth = statusLeft - chipButtonsRegionStartX;
 
 				scrollX = Mathf.Clamp(scrollX, Mathf.Min(0, chipButtonRegionWidth - chipBarTotalWidthLastFrame), 0);
 				float buttonPosX = chipButtonsRegionStartX + scrollX;

@@ -59,6 +59,8 @@ namespace DLS.Graphics
 			InitUIFromChipDescription();
 		}
 
+		public const float LeftPanelWidth = 24f;
+
 		public static void DrawMenu()
 		{
 			// Don't draw menu when placing display
@@ -67,7 +69,7 @@ namespace DLS.Graphics
 			DrawSettings.UIThemeDLS theme = DrawSettings.ActiveUITheme;
 			WheelSelectorTheme wheelTheme = GetCustomizationWheelTheme(theme);
 
-			const float leftPanelWidth = 24f;
+			const float leftPanelWidth = LeftPanelWidth;
 			const float rightPanelWidth = 31f;
 			const float edgePad = 1.1f;
 			const float sectionGap = 0.75f;
@@ -87,8 +89,17 @@ namespace DLS.Graphics
 			// ---------------- Left: chip properties ----------------
 			float leftContentWidth = leftPanelWidth - edgePad * 2;
 			Vector2 leftTop = new(edgePad, UI.Height - edgePad);
-			DrawSectionHeader("CUSTOMIZE CHIP", leftTop, leftContentWidth, headerHeight, theme, true);
-			float leftY = leftTop.y - headerHeight - 1.35f;
+			float leftY;
+			if (MobileUI.IsActive)
+			{
+				// On a phone the header with BACK and the title covers the top of this panel.
+				leftY = MobileUI.SafeRectUI.yMax - MobileUI.ScreenHeaderHeight - 1.6f;
+			}
+			else
+			{
+				DrawSectionHeader("CUSTOMIZE CHIP", leftTop, leftContentWidth, headerHeight, theme, true);
+				leftY = leftTop.y - headerHeight - 1.35f;
+			}
 
 			DrawFieldLabel("NAME DISPLAY", new Vector2(edgePad, leftY), theme);
 			leftY -= 1.85f;
@@ -153,8 +164,8 @@ namespace DLS.Graphics
 			float displayHeight = Mathf.Max(4f, rightY - edgePad);
 			DrawDisplaysPanel(theme, new Vector2(rightX, rightY), rightContentWidth, displayHeight);
 
-			// Cancel
-			if (cancelConfirmButtonIndex == 0)
+			// Cancel (also Escape, and BACK on a phone, which used to do nothing here)
+			if (cancelConfirmButtonIndex == 0 || (KeyboardShortcuts.CancelShortcutTriggered && !CustomizationSceneDrawer.DisplayBusyThisFrame))
 			{
 				RevertChanges();
 				UIDrawer.SetActiveMenu(UIDrawer.MenuType.ChipSave);

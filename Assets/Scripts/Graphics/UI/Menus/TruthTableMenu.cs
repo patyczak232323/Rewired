@@ -96,8 +96,19 @@ namespace DLS.Graphics
 					? $"{table.RowCount} SAMPLED ROWS / {table.TotalInputBits} INPUT BITS"
 					: $"{table.RowCount} ROWS";
 
-			RewiredUI.DrawSectionHeader("TRUTH TABLE  /  " + (chipName ?? string.Empty).ToUpperInvariant(), area.TopLeft, area.Width, true, rightText);
-			float top = UI.PrevBounds.Bottom - 0.5f;
+			// On a phone the screen's header carries the title.
+			string title = "TRUTH TABLE  /  " + (chipName ?? string.Empty).ToUpperInvariant();
+			float top;
+			if (MobileUI.IsActive)
+			{
+				MobileUI.SetScreenHeader(title, rightText);
+				top = area.Top;
+			}
+			else
+			{
+				RewiredUI.DrawSectionHeader(title, area.TopLeft, area.Width, true, rightText);
+				top = UI.PrevBounds.Bottom - 0.5f;
+			}
 
 			// Buttons sit at the bottom so they stay reachable with a thumb on phones.
 			float buttonHeight = MobileUI.IsActive ? 4.2f : DrawSettings.ButtonHeight;
@@ -120,6 +131,14 @@ namespace DLS.Graphics
 
 				Vector2 size = new(area.Width, Mathf.Max(RowHeight, top - bottom));
 				UI.DrawScrollView(ID_Rows, new Vector2(area.Left, top), size, 0, Anchor.TopLeft, theme.ScrollTheme, drawRowFunc, table.RowCount);
+			}
+			else
+			{
+				// Says why in the empty space, not only in the status line at the bottom.
+				Vector2 centre = new(area.Centre.x, (top + bottom) / 2f);
+				UI.DrawText("NO TRUTH TABLE", theme.FontBold, theme.FontSizeRegular * 0.86f, centre + Vector2.up * 1.3f, Anchor.TextCentre, Color.white);
+				string reason = table == null ? "The chip was not found." : "Only chips whose outputs depend on their inputs alone have one.";
+				UI.DrawText(reason, theme.FontRegular, theme.FontSizeRegular * 0.68f, centre + Vector2.down * 1.1f, Anchor.TextCentre, RewiredUI.SecondaryText);
 			}
 
 			if (action == 0) RecordTests();

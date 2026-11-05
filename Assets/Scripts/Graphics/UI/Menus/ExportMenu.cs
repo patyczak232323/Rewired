@@ -60,15 +60,25 @@ namespace DLS.Graphics
 			float buttonHeight = MobileUI.IsActive ? 4.6f : DrawSettings.ButtonHeight * 1.2f;
 			float width = MobileUI.IsActive ? Mathf.Min(MobileUI.SafeRectUI.width - 2f, 60f) : 34f;
 			Vector2 topLeft = MobileUI.IsActive
-				? new Vector2(MobileUI.SafeRectUI.center.x - width / 2, MobileUI.SafeRectUI.yMax - 6.4f)
+				? new Vector2(MobileUI.SafeRectUI.center.x - width / 2, MobileUI.SafeRectUI.yMax - MobileUI.ScreenHeaderHeight - 2f)
 				: UI.Centre + new Vector2(-width / 2, 14f);
 
 			Draw.ID panelID = UI.ReservePanel();
 			using (UI.BeginBoundsScope(true))
 			{
+				// On a phone the screen's header carries the title.
 				string title = string.IsNullOrWhiteSpace(chipName) ? "EXPORT" : "EXPORT  /  " + chipName.ToUpperInvariant();
-				RewiredUI.DrawSectionHeader(title, topLeft, width, true);
-				Vector2 pos = UI.PrevBounds.BottomLeft + Vector2.down * 1f;
+				Vector2 pos = topLeft;
+				if (MobileUI.IsActive)
+				{
+					MobileUI.SetScreenHeader(title);
+				}
+				else
+				{
+					RewiredUI.DrawSectionHeader(title, topLeft, width, true);
+					pos = UI.PrevBounds.BottomLeft + Vector2.down * 1f;
+				}
+
 				Vector2 size = new(width, buttonHeight);
 				const float gap = 0.6f;
 

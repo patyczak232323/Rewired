@@ -26,8 +26,15 @@ namespace DLS.Graphics
 
 		public static bool IsPlacingDisplay => displayInteractState == DisplayInteractState.Placing;
 
+		static int busyFrame = -1;
+
+		// Whether a display was being placed, moved or resized when this frame began: Escape then
+		// cancels that, and not the whole customization.
+		public static bool DisplayBusyThisFrame => busyFrame == Time.frameCount;
+
 		public static void DrawCustomizationScene()
 		{
+			if (displayInteractState != DisplayInteractState.None) busyFrame = Time.frameCount;
 			SubChipInstance chip = ChipSaveMenu.ActiveCustomizeChip;
 
 			HandleKeyboardShortcuts();

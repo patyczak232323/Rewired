@@ -30,14 +30,17 @@ namespace DLS.Graphics
 		const string PrefPaletteOpen = "rewired.mobile.paletteOpen";
 		const string PrefOrientation = "rewired.mobile.orientation";
 
+		// Height of the header of screens opened from the editor (BACK and the screen's name).
+		public const float ScreenHeaderHeight = 6f;
+
 		static string notice;
 		static bool noticeIsGood;
 		static float noticeUntil;
+		static string screenTitle;
+		static string screenInfo;
 		static UIDrawer.MenuType lastMenu;
 		static string chipNameWhenSaveOpened;
 		static bool unsavedWhenSaveOpened;
-		static bool unsavedChanges;
-		static float unsavedCheckTime = -1;
 
 		// "-mobile-ui" on the command line shows the touch interface in a desktop build, with the
 		// mouse acting as one finger, to try and screenshot it without a phone.
@@ -148,14 +151,17 @@ namespace DLS.Graphics
 			}
 		}
 
-		// The board without the view buttons and the room the selection bar takes at the bottom,
-		// so FIT leaves the whole circuit visible.
+		// The board without the view buttons, the room the selection bar takes at the bottom and
+		// the key pad, so FIT leaves the whole circuit visible.
 		public static Rect FitRectUI
 		{
 			get
 			{
 				Rect canvas = CanvasRectUI;
-				return Rect.MinMaxRect(canvas.xMin + 1f, canvas.yMin + 7f, canvas.xMax - ToolSize - 2f, canvas.yMax - 1f);
+				float keyPad = MobileKeyPad.ReservedSize(Project.ActiveProject);
+				float bottom = canvas.yMin + Mathf.Max(7f, Portrait ? keyPad : 0);
+				float right = canvas.xMax - Mathf.Max(ToolSize + 2f, Portrait ? 0 : keyPad);
+				return Rect.MinMaxRect(canvas.xMin + 1f, bottom, right, canvas.yMax - 1f);
 			}
 		}
 
@@ -213,6 +219,7 @@ namespace DLS.Graphics
 			Vector2 point = screenPosition * (UIWidth / Screen.width);
 			Rect safe = SafeRectUI;
 			if (point.y >= safe.yMax - TopBarHeight) return true;
+			if (MobileKeyPad.ContainsUIPoint(point)) return true;
 			return PaletteShown && MobilePalette.PanelRect(safe).Contains(point);
 		}
 
@@ -267,8 +274,13 @@ namespace DLS.Graphics
 				return;
 			}
 
-			// Full-screen tools keep their own content on a phone-sized canvas, with a large
-			// BACK button in the corner.
+			// Full-screen tools keep their own content on a phone-sized canvas, under a header with
+			// a large BACK button and the screen's name. They hide the board, so it does not
+			// show through their gaps; small popups leave it visible behind a dimmed layer.
+			screenTitle = null;
+			screenInfo = null;
+			if (HidesBoard(menu)) UI.DrawFullscreenPanel(ScreenCol);
+
 			switch (menu)
 			{
 				case UIDrawer.MenuType.ChipSave: ChipSaveMenu.DrawMenu(); break;
@@ -290,9 +302,39 @@ namespace DLS.Graphics
 				case UIDrawer.MenuType.MobileHelp: MobileHelpOverlay.Draw(); break;
 			}
 
-			DrawModalBackButton(menu);
+			DrawScreenHeader(menu);
 			ContextMenu.Update();
 		}
+
+		// The background of full-screen tools, the same as the home screen's.
+		public static Color ScreenCol => ColHelper.MakeCol255(23, 24, 28);
+
+		static bool HidesBoard(UIDrawer.MenuType menu) => menu is UIDrawer.MenuType.ChipSave or UIDrawer.MenuType.ChipLibrary or
+			UIDrawer.MenuType.Preferences or UIDrawer.MenuType.SimulationDiagnostics or UIDrawer.MenuType.RhdlStudio or
+			UIDrawer.MenuType.RomEdit or UIDrawer.MenuType.Search or UIDrawer.MenuType.TruthTable or UIDrawer.MenuType.Export;
+
+		// A menu may name itself, and put a short status on the right of the header, while it draws.
+		public static void SetScreenHeader(string title, string info = null)
+		{
+			screenTitle = title;
+			screenInfo = info;
+		}
+
+		static string DefaultScreenTitle(UIDrawer.MenuType menu) => menu switch
+		{
+			UIDrawer.MenuType.ChipSave => "SAVE CHIP",
+			UIDrawer.MenuType.ChipLibrary => "CHIP LIBRARY",
+			UIDrawer.MenuType.ChipCustomization => "CUSTOMIZE",
+			UIDrawer.MenuType.Preferences => "SETTINGS",
+			UIDrawer.MenuType.SimulationDiagnostics => "DIAGNOSTICS",
+			UIDrawer.MenuType.RhdlStudio => "RHDL STUDIO",
+			UIDrawer.MenuType.RomEdit => "ROM EDITOR",
+			UIDrawer.MenuType.Search => "FIND A PART",
+			UIDrawer.MenuType.TruthTable => "TRUTH TABLE",
+			UIDrawer.MenuType.Export => "EXPORT",
+			// Small popups name themselves in their own card.
+			_ => string.Empty
+		};
 
 		// ---- Editor ----
 
@@ -416,17 +458,7 @@ namespace DLS.Graphics
 			MobileTheme.Text(MobileTheme.Fit(subtitle, titleWidth, 0.58f), new Vector2(x + 0.8f, bar.Centre.y - 1.15f), 0.58f, MobileTheme.SecondaryTextCol);
 		}
 
-		// Comparing the chip with its saved version builds a description, so not every frame.
-		static bool HasUnsavedChanges(Project project)
-		{
-			if (Time.unscaledTime - unsavedCheckTime > 0.5f || unsavedCheckTime < 0)
-			{
-				unsavedCheckTime = Time.unscaledTime;
-				unsavedChanges = project.ActiveChipHasUnsavedChanges();
-			}
-
-			return unsavedChanges;
-		}
+		static bool HasUnsavedChanges(Project project) => RewiredUI.ActiveChipHasUnsavedChanges(project);
 
 		// ---- Board: hints, view buttons, selection actions ----
 
@@ -441,6 +473,7 @@ namespace DLS.Graphics
 				DrawEmptyBoardCard(canvas);
 			}
 
+			MobileKeyPad.Draw(project, canvas);
 			MobileSelectionBar.Draw(project, canvas);
 		}
 
@@ -463,6 +496,16 @@ namespace DLS.Graphics
 				if (MobileTheme.IconButton(null, MobileIcon.Select, MobileTheme.Toggle(AreaSelectMode), new Vector2(x, y), size))
 				{
 					AreaSelectMode = !AreaSelectMode;
+				}
+				y -= ToolSize + gap;
+			}
+
+			// Shows and hides the large buttons for the board's KEY chips.
+			if (MobileKeyPad.BoardHasKeys(project))
+			{
+				if (MobileTheme.IconButton(null, MobileIcon.Keys, MobileTheme.Toggle(MobileKeyPad.Open), new Vector2(x, y), size))
+				{
+					MobileKeyPad.Open = !MobileKeyPad.Open;
 				}
 				y -= ToolSize + gap;
 			}
@@ -733,7 +776,9 @@ namespace DLS.Graphics
 			bool IsOverTopBar() => UI.ScreenToUISpace(InputHelper.MousePos).y >= safe.yMax - TopBarHeight;
 		}
 
-		static void DrawModalBackButton(UIDrawer.MenuType menu)
+		// The bar across the top of every screen opened from the editor: BACK, the screen's name and
+		// an optional status on the right. Content starts below ScreenHeaderHeight.
+		static void DrawScreenHeader(UIDrawer.MenuType menu)
 		{
 			// UnsavedChanges owns an explicit decision and should not be visually obscured;
 			// the guide has its own GOT IT button.
@@ -741,12 +786,37 @@ namespace DLS.Graphics
 
 			Rect safe = SafeRectUI;
 			UI.StartNewLayer();
+
+			// From the top of the screen, so nothing shows above it beside a camera cut-out. While
+			// customizing, the chip's preview stays visible: the header covers only the left panel.
+			float bottom = safe.yMax - ScreenHeaderHeight;
+			float barWidth = menu == UIDrawer.MenuType.ChipCustomization ? ChipCustomizationMenu.LeftPanelWidth : UI.Width;
+			UI.DrawPanel(new Vector2(0, UI.Height), new Vector2(barWidth, UI.Height - bottom), MobileTheme.BarCol, Anchor.TopLeft);
+			UI.DrawLine(new Vector2(0, bottom), new Vector2(barWidth, bottom), 0.07f, MobileTheme.LineCol);
+
+			const float backWidth = 11.5f;
 			Vector2 pos = new(safe.xMin + 0.6f, safe.yMax - 0.6f);
-			if (MobileTheme.IconButton("BACK", MobileIcon.Back, MobileTheme.Neutral, pos, new Vector2(11.5f, 4.8f)))
+			if (MobileTheme.IconButton("BACK", MobileIcon.Back, MobileTheme.Neutral, pos, new Vector2(backWidth, 4.8f)))
 			{
 				MobileInputBridge.DismissKeyboard();
 				if (MobileRuntime.IsRunning) MobileRuntime.ScheduleVirtualKey(KeyCode.Escape);
 				else KeyboardShortcuts.ScheduleCancel();
+			}
+
+			string title = screenTitle ?? DefaultScreenTitle(menu);
+			float titleX = pos.x + backWidth + 1.4f;
+			float centreY = safe.yMax - 3f;
+			float right = Mathf.Min(safe.xMax, barWidth) - 1f;
+			const float titleScale = 1.0f;
+			const float infoScale = 0.6f;
+
+			// The status gives way to the title when both do not fit.
+			float titleWidth = Mathf.Min(MobileTheme.TextWidth(title, titleScale, true), right - titleX);
+			MobileTheme.Text(MobileTheme.Fit(title, titleWidth, titleScale, true), new Vector2(titleX, centreY), titleScale, Color.white, Anchor.TextCentreLeft, true);
+			float infoWidth = right - (titleX + titleWidth + 2f);
+			if (!string.IsNullOrEmpty(screenInfo) && infoWidth > 6f)
+			{
+				MobileTheme.Text(MobileTheme.Fit(screenInfo, infoWidth, infoScale), new Vector2(right, centreY), infoScale, MobileTheme.SecondaryTextCol, Anchor.TextCentreRight);
 			}
 		}
 

@@ -213,32 +213,13 @@ namespace DLS.Graphics
 			const float gap = 0.45f;
 			float left = safe.xMin + pad;
 			float width = safe.width - pad * 2f;
-			float top = safe.yMax - pad;
 
-			// Dedicated mobile header. The left side is intentionally reserved for
-			// MobileUI's persistent BACK button, which is drawn above this menu.
-			UI.DrawPanel(new Vector2(left, top), new Vector2(width, 5.2f), RewiredUI.SurfaceRaised, Anchor.TopLeft);
-			Bounds2D header = UI.PrevBounds;
-			UI.DrawLine(header.BottomLeft, header.BottomRight, 0.07f, RewiredUI.Accent);
-			UI.DrawText(
-				"RHDL STUDIO",
-				theme.FontBold,
-				theme.FontSizeRegular * 0.98f,
-				header.CentreLeft + Vector2.right * 12.8f,
-				Anchor.TextCentreLeft,
-				Color.white);
-
+			// MobileUI draws the header with BACK; the caret position goes on its right.
 			string sourceInfo = $"LN {CodeEditor.CaretLine}  COL {CodeEditor.CaretColumn}  /  {CodeEditor.LineCount} LINES";
 			if (CodeEditor.IsDirty) sourceInfo += "  /  MODIFIED";
-			UI.DrawText(
-				sourceInfo,
-				theme.FontRegular,
-				theme.FontSizeRegular * 0.62f,
-				header.CentreRight + Vector2.left * 0.9f,
-				Anchor.TextCentreRight,
-				RewiredUI.SecondaryText);
+			MobileUI.SetScreenHeader("RHDL STUDIO", sourceInfo);
 
-			float actionTop = header.Bottom - gap;
+			float actionTop = safe.yMax - MobileUI.ScreenHeaderHeight - gap;
 			float actionH = 4.7f;
 			float actionGap = 0.42f;
 			float actionW = (width - actionGap * 3f) / 4f;
@@ -259,9 +240,7 @@ namespace DLS.Graphics
 					true,
 					false,
 					false,
-					Anchor.TopLeft,
-					true,
-					0.35f))
+					Anchor.TopLeft))
 				{
 					continue;
 				}
@@ -335,7 +314,9 @@ namespace DLS.Graphics
 
 				InputFieldTheme editorTheme = theme.ChipNameInputField;
 				editorTheme.font = theme.FontRegular;
-				editorTheme.fontSize = theme.FontSizeRegular * 0.66f;
+				// Upright the screen is narrow, so its units are small: the code gets a larger size
+				// to stay readable; long lines are cut at the right edge either way.
+				editorTheme.fontSize = theme.FontSizeRegular * (MobileUI.Portrait ? 0.8f : 0.7f);
 				editorTheme.bgCol = Color.clear;
 				editorTheme.focusBorderCol = RewiredUI.Accent;
 

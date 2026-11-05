@@ -216,9 +216,6 @@ namespace DLS.Graphics
 			Vector2 left = new(safe.xMin + outerPad, top);
 			Vector2 right = new(left.x + colWidth + gap, top);
 
-			UI.DrawText("PREFERENCES", theme.FontBold, theme.FontSizeRegular * 1.05f,
-				new Vector2(safe.xMin + 13.2f, safe.yMax - 3.0f), Anchor.TextCentreLeft, Color.white);
-
 			DrawMobileHeader("DISPLAY & EDITING", ref left, colWidth);
 
 			int mainPinNamesMode = DrawMobileWheel("I/O pin names", PinDisplayOptionsMobile, ID_MainPinNames, ref left);
