@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Seb.Helpers;
 using Seb.Types;
 using Seb.Vis;
@@ -21,7 +22,8 @@ namespace DLS.Graphics
 		Fit,
 		Select,
 		Search,
-		Close
+		Close,
+		Keys
 	}
 
 	// Colours, button styles and vector icons shared by the touch interface.
@@ -187,6 +189,29 @@ namespace DLS.Graphics
 					Ring(new Vector2(c.x - h * 0.2f, c.y + h * 0.2f), h * 0.55f, t, col);
 					UI.DrawLine(new Vector2(c.x + h * 0.2f, c.y - h * 0.2f), new Vector2(c.x + h * 0.85f, c.y - h * 0.85f), t * 1.2f, col);
 					break;
+				case MobileIcon.Keys:
+				{
+					// A small keyboard: an outline, two rows of keys and a space bar.
+					float w = h * 0.95f;
+					float top = c.y + h * 0.62f;
+					float bottom = c.y - h * 0.62f;
+					UI.DrawLine(new Vector2(c.x - w, bottom), new Vector2(c.x - w, top), t, col);
+					UI.DrawLine(new Vector2(c.x - w, top), new Vector2(c.x + w, top), t, col);
+					UI.DrawLine(new Vector2(c.x + w, top), new Vector2(c.x + w, bottom), t, col);
+					UI.DrawLine(new Vector2(c.x + w, bottom), new Vector2(c.x - w, bottom), t, col);
+					float keySize = h * 0.22f;
+					for (int row = 0; row < 2; row++)
+					{
+						for (int i = 0; i < 4; i++)
+						{
+							Vector2 key = new(c.x - w * 0.6f + i * w * 0.4f, c.y + h * 0.28f - row * h * 0.36f);
+							UI.DrawPanel(key, new Vector2(keySize, keySize), col);
+						}
+					}
+
+					UI.DrawLine(new Vector2(c.x - w * 0.45f, c.y - h * 0.38f), new Vector2(c.x + w * 0.45f, c.y - h * 0.38f), t, col);
+					break;
+				}
 				case MobileIcon.Close:
 					UI.DrawLine(new Vector2(c.x - h * 0.7f, c.y - h * 0.7f), new Vector2(c.x + h * 0.7f, c.y + h * 0.7f), t, col);
 					UI.DrawLine(new Vector2(c.x - h * 0.7f, c.y + h * 0.7f), new Vector2(c.x + h * 0.7f, c.y - h * 0.7f), t, col);
@@ -231,6 +256,26 @@ namespace DLS.Graphics
 		{
 			DrawSettings.UIThemeDLS theme = DrawSettings.ActiveUITheme;
 			return UI.CalculateTextSize(text, theme.FontSizeRegular * scale, bold ? theme.FontBold : theme.FontRegular).x;
+		}
+
+		// Splits text into lines that fit a width, breaking between words.
+		public static List<string> Wrap(string text, float width, float scale, bool bold = false)
+		{
+			List<string> lines = new();
+			string line = string.Empty;
+			foreach (string word in (text ?? string.Empty).Split(' '))
+			{
+				string candidate = line.Length == 0 ? word : line + " " + word;
+				if (line.Length > 0 && TextWidth(candidate, scale, bold) > width)
+				{
+					lines.Add(line);
+					line = word;
+				}
+				else line = candidate;
+			}
+
+			lines.Add(line);
+			return lines;
 		}
 
 		// Cuts a label to fit a width, ending it with "..." when shortened.
