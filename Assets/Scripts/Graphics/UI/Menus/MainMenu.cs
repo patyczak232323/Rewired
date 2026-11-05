@@ -76,6 +76,9 @@ namespace DLS.Graphics
 		static string[] allProjectNames;
 		static (bool compatible, string message)[] projectCompatibilities;
 		static string[] projectWarnings;
+		static string[] projectSummaries;
+		static float lastProjectClickTime = -1;
+		static bool openProjectRequested;
 
 		static int selectedProjectIndex;
 
@@ -169,17 +172,22 @@ namespace DLS.Graphics
 			Color shadowCol = ColHelper.MakeCol255(87, 94, 230);
 			Color subtitleCol = new(1, 1, 1, 0.55f);
 
-			// Logo to the left of the title, the two centred together.
+			// Logo to the left of the title, the two centred together. The logo's square has room
+			// round the chip for its pins, so it is sized and spaced by the chip as drawn.
 			Vector2 titleSize = UI.CalculateTextSize(title, titleFontSize, FontType.Born2bSporty);
-			float logoSize = titleSize.y * 1.25f;
-			const float logoGap = 1.5f;
-			float titleShift = (logoSize + logoGap) / 2;
+			float logoVisible = titleSize.y * 0.92f;
+			float logoSize = logoVisible / RewiredLogo.DrawnFraction;
+			const float logoGap = 2.4f;
+			float titleShift = (logoVisible + logoGap) / 2;
 			Vector2 titleTop = UI.Centre + new Vector2(titleShift, titleHeight);
-			RewiredLogo.Draw(titleTop + new Vector2(-titleSize.x / 2 - logoGap - logoSize / 2, -titleSize.y / 2), logoSize);
+			RewiredLogo.Draw(titleTop + new Vector2(-titleSize.x / 2 - logoGap - logoVisible / 2, -titleSize.y / 2), logoSize);
 
 			UI.DrawText(title, FontType.Born2bSporty, titleFontSize, titleTop + Vector2.up * shaddowOffset, Anchor.CentreTop, shadowCol);
 			UI.DrawText(title, FontType.Born2bSporty, titleFontSize, titleTop, Anchor.CentreTop, Color.white);
-			UI.DrawText(subtitle, FontType.Born2bSporty, subtitleFontSize, UI.Centre + Vector2.up * 14.0f, Anchor.CentreTop, subtitleCol);
+
+			// Under the title, clear of its shadow.
+			Vector2 subtitleTop = titleTop + Vector2.down * (titleSize.y + 1.6f);
+			UI.DrawText(subtitle, FontType.Born2bSporty, subtitleFontSize, subtitleTop, Anchor.CentreTop, subtitleCol);
 		}
 
 		static void DrawMainScreen()
@@ -263,26 +271,45 @@ namespace DLS.Graphics
 			else if (buttonIndex == deleteButtonIndex) activePopup = PopupKind.DeleteConfirmation;
 			else if (buttonIndex == duplicateButtonIndex) activePopup = PopupKind.NamePopup_DuplicateProject;
 			else if (buttonIndex == renameButtonIndex) activePopup = PopupKind.NamePopup_RenameProject;
-			else if (buttonIndex == openButtonIndex) Main.CreateOrLoadProject(SelectedProjectName, string.Empty);
+			else if (buttonIndex == openButtonIndex || (compatibleProject && activePopup == PopupKind.None && (openProjectRequested || KeyboardShortcuts.ConfirmShortcutTriggered)))
+			{
+				openProjectRequested = false;
+				Main.CreateOrLoadProject(SelectedProjectName, string.Empty);
+			}
+
+			openProjectRequested = false;
 		}
 
 		static bool ProjectNameValidator(string inputString) => inputString.Length <= 20 && !SaveUtils.NameContainsForbiddenChar(inputString);
 
+		// Each row: the name on the left, its chip count and last save on the right. A double click
+		// opens the project.
 		static void DrawAllProjectsInScrollView(Vector2 topLeft, float width, bool isLayoutPass)
 		{
-			float spacing = 0;
+			const float spacing = 0;
+			const float textPad = 1.2f;
 			bool enabled = activePopup == PopupKind.None;
+			DrawSettings.UIThemeDLS theme = DrawSettings.ActiveUITheme;
 
 			for (int i = 0; i < allProjectDescriptions.Length; i++)
 			{
 				ProjectDescription desc = allProjectDescriptions[i];
 				bool selected = i == selectedProjectIndex;
-				ButtonTheme buttonTheme = selected ? DrawSettings.ActiveUITheme.ProjectSelectionButtonSelected : DrawSettings.ActiveUITheme.ProjectSelectionButton;
+				ButtonTheme buttonTheme = selected ? theme.ProjectSelectionButtonSelected : theme.ProjectSelectionButton;
 				if (!projectCompatibilities[i].compatible) buttonTheme.textCols.normal.a = 0.5f;
 
-				if (UI.Button(desc.ProjectName, buttonTheme, topLeft, new Vector2(width, 0), enabled, false, true, Anchor.TopLeft))
+				bool pressed = UI.Button(desc.ProjectName, buttonTheme, topLeft, new Vector2(width, 0.6f), enabled, false, true, Anchor.TopLeft, true, textPad);
+				Bounds2D row = UI.PrevBounds;
+				UI.DrawText(projectSummaries[i], theme.FontRegular, theme.FontSizeRegular * 0.72f, row.CentreRight + Vector2.left * textPad, Anchor.TextCentreRight,
+					new Color(1, 1, 1, selected ? 0.75f : 0.45f));
+				UI.OverridePreviousBounds(row);
+
+				if (pressed && !isLayoutPass)
 				{
+					bool doubleClick = selectedProjectIndex == i && Time.unscaledTime - lastProjectClickTime < 0.4f;
 					selectedProjectIndex = i;
+					lastProjectClickTime = Time.unscaledTime;
+					if (doubleClick && projectCompatibilities[i].compatible) openProjectRequested = true;
 				}
 
 				topLeft = UI.PrevBounds.BottomLeft + Vector2.down * spacing;
@@ -296,6 +323,7 @@ namespace DLS.Graphics
 			allProjectNames = allProjectDescriptions.Select(d => d.ProjectName).ToArray();
 			projectCompatibilities = allProjectDescriptions.Select(d => CanOpenProject(d)).ToArray();
 			projectWarnings = allProjectDescriptions.Select(d => Loader.BuiltinNameConflictMessage(Loader.FindBuiltinNameConflicts(d))).ToArray();
+			projectSummaries = allProjectDescriptions.Select(d => ProjectSummary.Describe(d, DateTime.Now)).ToArray();
 		}
 
 		static (bool canOpen, string failureReason) CanOpenProject(ProjectDescription projectDescription)

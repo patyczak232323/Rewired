@@ -137,9 +137,6 @@ namespace DLS.Graphics
 			Vector2 leftTop = new(safe.xMin + outerPad, contentTop);
 			Vector2 rightTop = stacked ? new Vector2(leftTop.x, contentBottom + actionsHeight) : new Vector2(leftTop.x + leftWidth + gap, contentTop);
 
-			UI.DrawText("CHIP LIBRARY", theme.FontBold, theme.FontSizeRegular * 1.05f,
-				new Vector2(safe.xMin + 13.2f, safe.yMax - 3.0f), Anchor.TextCentreLeft, Color.white);
-
 			bool popupHasFocus = creatingNewCollection || renamingCollection ||
 			                     isConfirmingChipDeletion || isConfirmingCollectionDeletion;
 

@@ -98,9 +98,18 @@ namespace DLS.Graphics
 			Color secondary = new(1, 1, 1, 0.74f);
 			Color accent = theme.MainMenuButtonTheme.buttonCols.hover;
 
-			DrawTopHeader(theme, topLeft, accent, dim);
+			// On a phone the screen's header already names it, so the frame and state go there.
+			Vector2 contentTop = topLeft;
+			if (MobileUI.IsActive)
+			{
+				MobileUI.SetScreenHeader("DIAGNOSTICS", StateText());
+			}
+			else
+			{
+				DrawTopHeader(theme, topLeft, accent, dim);
+				contentTop += Vector2.down * (headerHeight + 0.75f);
+			}
 
-			Vector2 contentTop = topLeft + Vector2.down * (headerHeight + 0.75f);
 			Vector2 leftPos = contentTop;
 			Vector2 rightPos = contentTop + Vector2.right * (leftColumnWidth + columnGap);
 
@@ -124,6 +133,17 @@ namespace DLS.Graphics
 				Anchor.TopLeft);
 		}
 
+		static string StateText()
+		{
+			Project project = Project.ActiveProject;
+			string state = project == null
+				? "NO PROJECT"
+				: project.simPaused
+					? "PAUSED"
+					: "RUNNING";
+			return $"FRAME {RewiredEngine.SimulationFrame}   |   {state}";
+		}
+
 		static void DrawTopHeader(
 			DrawSettings.UIThemeDLS theme,
 			Vector2 topLeft,
@@ -143,15 +163,8 @@ namespace DLS.Graphics
 				Color.white);
 
 			Project project = Project.ActiveProject;
-			string state = project == null
-				? "NO PROJECT"
-				: project.simPaused
-					? "PAUSED"
-					: "RUNNING";
-
-			string rightText = $"FRAME {RewiredEngine.SimulationFrame}   |   {state}";
 			UI.DrawText(
-				rightText,
+				StateText(),
 				theme.FontBold,
 				theme.FontSizeRegular * 0.72f,
 				bounds.CentreRight + Vector2.left * 1f,

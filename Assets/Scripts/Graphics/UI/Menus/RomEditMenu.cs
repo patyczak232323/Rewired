@@ -47,14 +47,21 @@ namespace DLS.Graphics
 			MenuHelper.DrawBackgroundOverlay();
 
 			// ---- Draw ROM contents ----
-			scrollViewBounds = Bounds2D.CreateFromCentreAndSize(UI.Centre, new Vector2(UI.Width * 0.4f, UI.Height * 0.8f));
-			float workspaceWidth = UI.Width * 0.65f;
-			RewiredUI.DrawSectionHeader(
-				"ROM EDITOR",
-				scrollViewBounds.TopLeft + Vector2.up * 2.8f,
-				workspaceWidth,
-				true,
-				$"{RowCount} WORDS  /  {ActiveRomDataBitCount} BIT");
+			string romInfo = $"{RowCount} WORDS  /  {ActiveRomDataBitCount} BIT";
+			if (MobileUI.IsActive)
+			{
+				// Below the phone's header, which names the screen and shows the size.
+				Rect safe = MobileUI.SafeRectUI;
+				float top = safe.yMax - MobileUI.ScreenHeaderHeight - 1f;
+				float bottom = safe.yMin + 1f;
+				scrollViewBounds = Bounds2D.CreateFromTopLeftAndSize(new Vector2(UI.Centre.x - UI.Width * 0.2f, top), new Vector2(UI.Width * 0.4f, top - bottom));
+				MobileUI.SetScreenHeader("ROM EDITOR", romInfo);
+			}
+			else
+			{
+				scrollViewBounds = Bounds2D.CreateFromCentreAndSize(UI.Centre, new Vector2(UI.Width * 0.4f, UI.Height * 0.8f));
+				RewiredUI.DrawSectionHeader("ROM EDITOR", scrollViewBounds.TopLeft + Vector2.up * 2.8f, UI.Width * 0.65f, true, romInfo);
+			}
 
 			ScrollViewTheme scrollTheme = DrawSettings.ActiveUITheme.ScrollTheme;
 			UI.DrawScrollView(ID_scrollbar, scrollViewBounds.TopLeft, scrollViewBounds.Size, 0, Anchor.TopLeft, scrollTheme, scrollViewDrawElementFunc, RowCount);

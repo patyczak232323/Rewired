@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using DLS.Game;
 using Seb.Types;
 using Seb.Vis;
@@ -25,29 +26,62 @@ namespace DLS.Graphics
 			MenuHelper.DrawBackgroundOverlay();
 			Rect safe = MobileUI.SafeRectUI;
 
-			float width = Mathf.Min(safe.width - 4f, 70f);
-			const float stepHeight = 4.5f;
-			float height = 4.2f + Steps.Length * stepHeight + 2.6f + 5.6f;
-			height = Mathf.Min(height, safe.height - 1f);
+			// Upright the screen's units are smaller, so the text is larger and wraps.
+			bool portrait = MobileUI.Portrait;
+			float textScale = portrait ? 0.74f : 0.6f;
+			float titleScale = portrait ? 0.72f : 0.62f;
+			float lineHeight = DrawSettings.ActiveUITheme.FontSizeRegular * textScale * 1.45f;
+			const float titleToText = 1.9f;
+			const float stepGap = 1.3f;
+
+			float width = Mathf.Min(safe.width - (portrait ? 2f : 4f), 70f);
+			const float textLeft = 4.6f;
+			float textWidth = width - textLeft - 1.2f;
+
+			List<string>[] wrapped = new List<string>[Steps.Length];
+			float stepsHeight = 0;
+			for (int i = 0; i < Steps.Length; i++)
+			{
+				wrapped[i] = MobileTheme.Wrap(Steps[i].text, textWidth, textScale);
+				stepsHeight += titleToText + (wrapped[i].Count - 1) * lineHeight + stepGap + 1f;
+			}
+
+			string hold = "Hold a finger on anything to see all its options.";
+			List<string> holdLines = MobileTheme.Wrap(hold, portrait ? width - 3f : width - 20f, 0.58f);
+			float footerHeight = portrait ? 4.4f + 1.2f + holdLines.Count * 1.4f + 1f : 5.6f;
+			float height = Mathf.Min(4.6f + stepsHeight + footerHeight + 0.6f, safe.height - 1f);
 			Bounds2D panel = MobileTheme.Card(new Vector2(safe.center.x, safe.center.y), new Vector2(width, height), Anchor.Centre);
 
 			MobileTheme.Text("HOW IT WORKS", panel.TopLeft + new Vector2(1.5f, -2.2f), 0.86f, Color.white, Anchor.TextCentreLeft, true);
 
-			float y = panel.Top - 5.6f;
-			float textX = panel.Left + 4.6f;
+			float y = panel.Top - 5f;
+			float textX = panel.Left + textLeft;
 			for (int i = 0; i < Steps.Length; i++)
 			{
-				(string title, string text) = Steps[i];
-				UI.DrawCircle(new Vector2(panel.Left + 2.4f, y), 1.3f, MobileTheme.Accent);
-				MobileTheme.Text((i + 1).ToString(), new Vector2(panel.Left + 2.4f, y), 0.62f, Color.white, Anchor.TextCentre, true);
-				MobileTheme.Text(title, new Vector2(textX, y + 0.85f), 0.62f, MobileTheme.Accent, Anchor.TextCentreLeft, true);
-				MobileTheme.Text(MobileTheme.Fit(text, panel.Right - textX - 1f, 0.6f), new Vector2(textX, y - 1.05f), 0.6f, Color.white);
-				y -= stepHeight;
+				string title = Steps[i].title;
+				UI.DrawCircle(new Vector2(panel.Left + 2.4f, y - titleToText / 2), 1.3f, MobileTheme.Accent);
+				MobileTheme.Text((i + 1).ToString(), new Vector2(panel.Left + 2.4f, y - titleToText / 2), 0.62f, Color.white, Anchor.TextCentre, true);
+				MobileTheme.Text(title, new Vector2(textX, y), titleScale, MobileTheme.Accent, Anchor.TextCentreLeft, true);
+				y -= titleToText;
+				foreach (string line in wrapped[i])
+				{
+					MobileTheme.Text(line, new Vector2(textX, y), textScale, Color.white);
+					y -= lineHeight;
+				}
+
+				y -= stepGap + 1f - lineHeight;
 			}
 
-			MobileTheme.Text("Hold a finger on anything to see all its options.", new Vector2(panel.Left + 1.5f, panel.Bottom + 3f), 0.58f, MobileTheme.SecondaryTextCol);
+			// The tip sits beside GOT IT when there is room; upright, above it.
+			float tipY = portrait ? panel.Bottom + 4.4f + 1.9f + (holdLines.Count - 1) * 1.4f : panel.Bottom + 3f;
+			foreach (string line in holdLines)
+			{
+				MobileTheme.Text(line, new Vector2(panel.Left + 1.5f, tipY), 0.58f, MobileTheme.SecondaryTextCol);
+				tipY -= 1.4f;
+			}
 
-			if (MobileTheme.Button("GOT IT", MobileTheme.Primary, panel.BottomRight + new Vector2(-1f, 0.9f), new Vector2(15f, 4.4f), true, Anchor.BottomRight) ||
+			Vector2 buttonSize = portrait ? new Vector2(width - 2f, 4.4f) : new Vector2(15f, 4.4f);
+			if (MobileTheme.Button("GOT IT", MobileTheme.Primary, panel.BottomRight + new Vector2(-1f, 0.9f), buttonSize, true, Anchor.BottomRight) ||
 			    KeyboardShortcuts.CancelShortcutTriggered)
 			{
 				UIDrawer.SetActiveMenu(UIDrawer.MenuType.None);

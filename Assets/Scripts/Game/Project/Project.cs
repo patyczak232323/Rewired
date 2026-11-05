@@ -178,7 +178,10 @@ namespace DLS.Game
 
 			if (UIDrawer.ActiveMenu == UIDrawer.MenuType.None)
 			{
-				SimKeyboardHelper.TouchHeldKey = MobileUI.IsActive ? FindKeyChipUnderHeldPointer() : '\0';
+				// A key held on the touch key pad, else a KEY chip under the finger.
+				char touchKey = MobileUI.IsActive ? MobileKeyPad.HeldKey : '\0';
+				if (touchKey == '\0' && MobileUI.IsActive) touchKey = FindKeyChipUnderHeldPointer();
+				SimKeyboardHelper.TouchHeldKey = touchKey;
 				RewiredEngine.UpdateKeyboardInputFromMainThread();
 			}
 

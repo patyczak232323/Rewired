@@ -99,10 +99,6 @@ namespace DLS.Graphics
 			float pad = 1.2f;
 			float width = safe.width - pad * 2f;
 
-			// The title sits beside the BACK button, which MobileUI draws over this menu.
-			UI.DrawText("FIND A PART", theme.FontBold, theme.FontSizeRegular * 1.05f,
-				new Vector2(safe.xMin + 13.3f, safe.yMax - 3f), Anchor.TextCentreLeft, Color.white);
-
 			Vector2 topLeft = new(safe.xMin + pad, safe.yMax - 6.2f);
 			InputFieldTheme inputTheme = theme.ChipNameInputField;
 			UI.InputField(ID_SearchInput, inputTheme, topLeft, new Vector2(width, 5.6f),

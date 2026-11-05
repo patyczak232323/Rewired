@@ -85,7 +85,7 @@ The repository includes a compact example progression ending with a **4-bit CPU*
 - Snake example project, installed on first start
 - updates from GitHub Releases inside the app on Windows, Linux and Android
 - Windows x64, Linux x86_64, WebGL (browser) and Android ARM64 (experimental) release builds
-- touch interface for Android tablets and phones, held sideways or upright (Settings → Screen): drag parts from a categorised panel, tap a part for its actions, one-finger panning and a step-by-step guide
+- touch interface for Android tablets and phones, held sideways or upright (Settings → Screen): drag parts from a categorised panel, tap a part for its actions, one-finger panning, on-screen keys for KEY chips (play Snake without a keyboard) and a step-by-step guide
 
 ## Download
 

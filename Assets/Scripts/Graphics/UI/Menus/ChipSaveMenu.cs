@@ -168,10 +168,6 @@ namespace DLS.Graphics
 			Rect safe = MobileUI.SafeRectUI;
 			float pad = 1.2f;
 			float width = safe.width - pad * 2f;
-			// The title sits beside the BACK button, which MobileUI draws over this menu.
-			UI.DrawText("SAVE CHIP", theme.FontBold, theme.FontSizeRegular * 1.1f,
-				new Vector2(safe.xMin + 13.3f, safe.yMax - 3f), Anchor.TextCentreLeft, Color.white);
-
 			Vector2 topLeft = new(safe.xMin + pad, safe.yMax - 6.2f);
 			InputFieldTheme inputTheme = theme.ChipNameInputField;
 			InputFieldState inputFieldState = UI.InputField(
@@ -190,43 +186,49 @@ namespace DLS.Graphics
 			                !string.Equals(newName, Project.ActiveProject.ViewedChip.LastSavedDescription.Name, StringComparison.Ordinal);
 			bool canSave = IsValidSaveName(newName);
 
+			// Where the chip is kept: two buttons, one tap each, instead of a wheel. While the
+			// keyboard is up the label gives way, so SAVE stays above the keyboard.
+			bool keyboard = MobileInputBridge.KeyboardVisible;
 			topLeft = UI.PrevBounds.BottomLeft + Vector2.down * 0.8f;
-			UI.DrawText("AVAILABILITY", theme.FontBold, theme.FontSizeRegular * 0.68f,
-				topLeft + new Vector2(0.2f, -0.9f), Anchor.TextCentreLeft, new Color(1, 1, 1, 0.72f));
-			float scopeWidth = Mathf.Min(25f, width * 0.48f);
-			UI.WheelSelector(
-				ID_ChipScope,
-				ChipScopeOptions,
-				new Vector2(topLeft.x + width, topLeft.y),
-				new Vector2(scopeWidth, 4.3f),
-				theme.OptionsWheel,
-				Anchor.TopRight);
+			if (!keyboard)
+			{
+				UI.DrawText("AVAILABLE IN", theme.FontBold, theme.FontSizeRegular * 0.68f,
+					topLeft + new Vector2(0.2f, -0.9f), Anchor.TextCentreLeft, RewiredUI.SecondaryText);
+				topLeft.y -= 1.9f;
+			}
 
-			topLeft.y -= 5.1f;
 			float gap = 0.5f;
-			float buttonHeight = MobileInputBridge.KeyboardVisible ? 4.8f : 5.5f;
+			float half = (width - gap) / 2f;
+			float scopeHeight = keyboard ? 4f : 4.4f;
+			WheelSelectorState scope = UI.GetWheelSelectorState(ID_ChipScope);
+			for (int i = 0; i < ChipScopeOptions.Length; i++)
+			{
+				if (MobileTheme.Button(ChipScopeOptions[i], scope.index == i ? MobileTheme.Primary : MobileTheme.Quiet,
+					    topLeft + Vector2.right * (i * (half + gap)), new Vector2(half, scopeHeight), true, Anchor.TopLeft))
+				{
+					scope.index = i;
+				}
+			}
+
+			topLeft.y -= scopeHeight + (keyboard ? 0.6f : 1.2f);
+			float buttonHeight = keyboard ? 4.8f : 5.5f;
 
 			if (renaming)
 			{
 				float third = (width - gap * 2f) / 3f;
-				if (UI.Button("CUSTOMIZE", theme.MenuButtonTheme, topLeft, new Vector2(third, buttonHeight),
-					true, false, false, Anchor.TopLeft))
+				if (MobileTheme.Button("CUSTOMIZE", MobileTheme.Neutral, topLeft, new Vector2(third, buttonHeight)))
 				{
 					OpenCustomizationMenu();
 					return;
 				}
 
-				if (UI.Button("RENAME", theme.MainMenuButtonTheme,
-					topLeft + Vector2.right * (third + gap), new Vector2(third, buttonHeight),
-					canSave, false, false, Anchor.TopLeft))
+				if (MobileTheme.Button("RENAME", MobileTheme.Primary, topLeft + Vector2.right * (third + gap), new Vector2(third, buttonHeight), canSave))
 				{
 					Save(Project.SaveMode.Rename);
 					return;
 				}
 
-				if (UI.Button("SAVE AS", theme.MenuButtonTheme,
-					topLeft + Vector2.right * ((third + gap) * 2f), new Vector2(third, buttonHeight),
-					canSave, false, false, Anchor.TopLeft))
+				if (MobileTheme.Button("SAVE AS", MobileTheme.Neutral, topLeft + Vector2.right * ((third + gap) * 2f), new Vector2(third, buttonHeight), canSave))
 				{
 					Save(Project.SaveMode.SaveAs);
 					return;
@@ -234,17 +236,13 @@ namespace DLS.Graphics
 			}
 			else
 			{
-				float half = (width - gap) / 2f;
-				if (UI.Button("CUSTOMIZE", theme.MenuButtonTheme, topLeft, new Vector2(half, buttonHeight),
-					true, false, false, Anchor.TopLeft))
+				if (MobileTheme.Button("CUSTOMIZE", MobileTheme.Neutral, topLeft, new Vector2(half, buttonHeight)))
 				{
 					OpenCustomizationMenu();
 					return;
 				}
 
-				if (UI.Button("SAVE", theme.MainMenuButtonTheme,
-					topLeft + Vector2.right * (half + gap), new Vector2(half, buttonHeight),
-					canSave, false, false, Anchor.TopLeft))
+				if (MobileTheme.Button("SAVE", MobileTheme.Primary, topLeft + Vector2.right * (half + gap), new Vector2(half, buttonHeight), canSave))
 				{
 					Save(Project.SaveMode.Normal);
 					return;
@@ -252,7 +250,7 @@ namespace DLS.Graphics
 			}
 
 			topLeft.y -= buttonHeight + gap;
-			if (!MobileInputBridge.KeyboardVisible)
+			if (!keyboard)
 			{
 				string hint = SaveGlobally
 					? "One shared copy will be available in every project."

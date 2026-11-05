@@ -1,3 +1,4 @@
+using DLS.Game;
 using Seb.Helpers;
 using Seb.Types;
 using Seb.Vis;
@@ -16,6 +17,24 @@ namespace DLS.Graphics
 		public static Color SurfaceRaised => ColHelper.Darken(DrawSettings.ActiveUITheme.MenuPanelCol, 0.025f);
 		public static Color DimText => new(1, 1, 1, 0.58f);
 		public static Color SecondaryText => new(1, 1, 1, 0.74f);
+		public static Color UnsavedText => new(1f, 0.82f, 0.3f);
+
+		static bool unsavedChanges;
+		static float unsavedCheckTime = -1;
+
+		// Whether the open chip differs from its saved version. Comparing builds a description of
+		// the chip, so it is checked at most twice a second.
+		public static bool ActiveChipHasUnsavedChanges(Project project)
+		{
+			if (project == null) return false;
+			if (unsavedCheckTime < 0 || Time.unscaledTime - unsavedCheckTime > 0.5f)
+			{
+				unsavedCheckTime = Time.unscaledTime;
+				unsavedChanges = project.ActiveChipHasUnsavedChanges();
+			}
+
+			return unsavedChanges;
+		}
 
 		public static Bounds2D DrawSectionHeader(
 			string title,
