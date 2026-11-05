@@ -33,6 +33,22 @@ namespace DLS.Tests
 		}
 
 		[Test]
+		public void ReadsTheSha256DigestOfAssets()
+		{
+			string hex = new string('a', 32) + new string('0', 32);
+			ReleaseInfo release = ReleaseInfo.Parse(@"{ ""tag_name"": ""v1.0.0"", ""assets"": [
+  { ""name"": ""DLSRewired-Linux-x86_64.zip"", ""size"": 3, ""digest"": ""sha256:" + hex.ToUpperInvariant() + @""", ""browser_download_url"": ""https://example.invalid/l.zip"" },
+  { ""name"": ""DLSRewired-Windows-x64.zip"", ""size"": 3, ""digest"": ""sha256:nothex"", ""browser_download_url"": ""https://example.invalid/w.zip"" },
+  { ""name"": ""DLSRewired-Android-arm64.apk"", ""size"": 3, ""browser_download_url"": ""https://example.invalid/a.apk"" }
+] }");
+
+			Assert.IsTrue(release.TryGetSha256(UpdatePlatform.Linux, out string sha256));
+			Assert.AreEqual(hex, sha256);
+			Assert.IsFalse(release.TryGetSha256(UpdatePlatform.Windows, out _));
+			Assert.IsFalse(release.TryGetSha256(UpdatePlatform.Android, out _));
+		}
+
+		[Test]
 		public void ReleaseWithoutAssetsHasNothingToDownload()
 		{
 			ReleaseInfo release = ReleaseInfo.Parse(@"{ ""tag_name"": ""v1.0.0"" }");
