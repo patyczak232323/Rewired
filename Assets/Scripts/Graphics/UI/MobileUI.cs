@@ -41,8 +41,6 @@ namespace DLS.Graphics
 		static UIDrawer.MenuType lastMenu;
 		static string chipNameWhenSaveOpened;
 		static bool unsavedWhenSaveOpened;
-		static bool unsavedChanges;
-		static float unsavedCheckTime = -1;
 
 		// "-mobile-ui" on the command line shows the touch interface in a desktop build, with the
 		// mouse acting as one finger, to try and screenshot it without a phone.
@@ -460,17 +458,7 @@ namespace DLS.Graphics
 			MobileTheme.Text(MobileTheme.Fit(subtitle, titleWidth, 0.58f), new Vector2(x + 0.8f, bar.Centre.y - 1.15f), 0.58f, MobileTheme.SecondaryTextCol);
 		}
 
-		// Comparing the chip with its saved version builds a description, so not every frame.
-		static bool HasUnsavedChanges(Project project)
-		{
-			if (Time.unscaledTime - unsavedCheckTime > 0.5f || unsavedCheckTime < 0)
-			{
-				unsavedCheckTime = Time.unscaledTime;
-				unsavedChanges = project.ActiveChipHasUnsavedChanges();
-			}
-
-			return unsavedChanges;
-		}
+		static bool HasUnsavedChanges(Project project) => RewiredUI.ActiveChipHasUnsavedChanges(project);
 
 		// ---- Board: hints, view buttons, selection actions ----
 

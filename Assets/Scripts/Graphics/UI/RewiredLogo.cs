@@ -37,6 +37,9 @@ namespace DLS.Graphics
 		const float LetterBottom = -0.36f;
 		const float LetterTop = 0.36f;
 
+		// How much of the square the chip and its pins fill, across and up.
+		public const float DrawnFraction = BodyHalf + PinLength;
+
 		// Draws the logo in a square of the given size.
 		public static void Draw(Vector2 centre, float size)
 		{

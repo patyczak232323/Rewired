@@ -43,6 +43,7 @@ namespace DLS.Graphics
 		static int selectedProjectIndex = -1;
 		static string status = string.Empty;
 		static string[] projectWarnings = Array.Empty<string>();
+		static string[] projectSummaries = Array.Empty<string>();
 
 		static bool HasSelectedProject => selectedProjectIndex >= 0 && selectedProjectIndex < projects.Length;
 		static string SelectedProjectName => HasSelectedProject ? projects[selectedProjectIndex].ProjectName : string.Empty;
@@ -216,12 +217,13 @@ namespace DLS.Graphics
 			bool open = MobileTheme.Button(string.Empty, MobileTheme.Neutral, topLeft, new Vector2(width - manageWidth - 0.4f, height), true, Anchor.TopLeft);
 			Bounds2D row = UI.PrevBounds;
 			string name = MobileTheme.Fit(project.ProjectName.ToUpperInvariant(), row.Width - 2f, 0.78f, true);
+			MobileTheme.Text(name, row.CentreLeft + new Vector2(1.2f, 0.8f), 0.78f, Color.white, Anchor.TextCentreLeft, true);
+
+			// Below the name: a problem with the project, else its chip count and last save.
 			bool hasWarning = !string.IsNullOrEmpty(warning);
-			MobileTheme.Text(name, row.CentreLeft + new Vector2(1.2f, hasWarning ? 0.8f : 0), 0.78f, Color.white, Anchor.TextCentreLeft, true);
-			if (hasWarning)
-			{
-				MobileTheme.Text(MobileTheme.Fit(warning, row.Width - 2f, 0.52f), row.CentreLeft + new Vector2(1.2f, -1.1f), 0.52f, MobileTheme.WarningCol);
-			}
+			string detail = hasWarning ? warning : index < projectSummaries.Length ? projectSummaries[index] : string.Empty;
+			MobileTheme.Text(MobileTheme.Fit(detail, row.Width - 2f, 0.54f), row.CentreLeft + new Vector2(1.2f, -1.15f), 0.54f,
+				hasWarning ? MobileTheme.WarningCol : MobileTheme.SecondaryTextCol);
 
 			bool manage = MobileTheme.Button("MANAGE", MobileTheme.Quiet, new Vector2(row.Right + 0.4f, topLeft.y), new Vector2(manageWidth, height), true, Anchor.TopLeft);
 			UI.OverridePreviousBounds(entryBounds);
@@ -682,6 +684,7 @@ namespace DLS.Graphics
 			{
 				projects = Loader.LoadAllProjectDescriptions();
 				projectWarnings = projects.Select(p => Loader.BuiltinNameConflictMessage(Loader.FindBuiltinNameConflicts(p))).ToArray();
+				projectSummaries = projects.Select(p => ProjectSummary.Describe(p, DateTime.Now)).ToArray();
 				if (selectedProjectIndex >= projects.Length) selectedProjectIndex = -1;
 				status = string.Empty;
 			}
@@ -689,6 +692,7 @@ namespace DLS.Graphics
 			{
 				projects = Array.Empty<ProjectDescription>();
 				projectWarnings = Array.Empty<string>();
+				projectSummaries = Array.Empty<string>();
 				selectedProjectIndex = -1;
 				status = e.Message;
 				Debug.LogException(e);
@@ -752,6 +756,7 @@ namespace DLS.Graphics
 			projectNameMode = ProjectNameMode.New;
 			projects = Array.Empty<ProjectDescription>();
 			projectWarnings = Array.Empty<string>();
+			projectSummaries = Array.Empty<string>();
 			selectedProjectIndex = -1;
 			status = string.Empty;
 		}
