@@ -81,8 +81,12 @@ namespace DLS.Graphics
 			{
 				DesktopPartsPanel.Draw(project);
 				DesktopInspector.Draw(project);
+				// Text is drawn above the shapes of its layer, so whatever can open over the side
+				// panels (the bottom bar's collections, the menu, other menus) starts a new layer.
+				UI.StartNewLayer();
 				BottomBarUI.DrawUI(project);
 				DesktopToolbar.Draw(project);
+				UI.StartNewLayer();
 				BottomBarUI.DrawMenuPopup();
 				HandleDesktopShortcuts(project);
 			}
@@ -107,7 +111,11 @@ namespace DLS.Graphics
 			else if (menuToDraw == MenuType.ShortcutsHelp) ShortcutsHelpMenu.DrawMenu();
 
 			ContextMenu.Update();
-			if (drawEditorChrome) DesktopTheme.DrawHint();
+			if (drawEditorChrome)
+			{
+				UI.StartNewLayer();
+				DesktopTheme.DrawHint();
+			}
 		}
 
 		// Shortcuts of the desktop editor's own bars and panels.

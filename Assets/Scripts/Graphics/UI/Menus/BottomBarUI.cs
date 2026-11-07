@@ -64,6 +64,17 @@ namespace DLS.Graphics
 
 		static bool MenuButtonsAndShortcutsEnabled => Project.ActiveProject.CanEditViewedChip;
 
+		// Chip buttons in the bar and its collection popups, sized like the rest of the editor's bars.
+		static ButtonTheme ChipTheme
+		{
+			get
+			{
+				ButtonTheme theme = DrawSettings.ActiveUITheme.ChipButton;
+				theme.fontSize *= 0.78f;
+				return theme;
+			}
+		}
+
 		public static void DrawUI(Project project)
 		{
 			DrawBottomBar(project);
@@ -82,7 +93,9 @@ namespace DLS.Graphics
 
 		static void DrawPopupMenu()
 		{
+			// Sized like the rest of the top bar.
 			ButtonTheme theme = DrawSettings.ActiveUITheme.MenuPopupButtonTheme;
+			theme.fontSize *= 0.7f;
 			const float textPadX = 0.75f;
 			const float columnGap = 2.2f;
 
@@ -100,7 +113,7 @@ namespace DLS.Graphics
 
 			float menuWidth = textPadX * 2 + maxLabelWidth + columnGap + maxShortcutWidth;
 			Vector2 pos = new(DesktopToolbar.MenuButtonLeft, UI.Height - DesktopLayout.TopBarHeight - buttonSpacing * 2);
-			Vector2 size = new(menuWidth, buttonHeight);
+			Vector2 size = new(menuWidth, 2.1f);
 			Draw.ID panelID = UI.ReservePanel();
 
 			using (UI.BeginBoundsScope(true))
@@ -217,7 +230,7 @@ namespace DLS.Graphics
 			DesktopTheme.Text(label, new Vector2(1f, barHeight / 2), labelScale, RewiredUI.DimText, Anchor.TextCentreLeft, true);
 			float chipsLeft = 1f + DesktopTheme.TextWidth(label, labelScale, true) + 0.8f;
 			float statusLeft = UI.Width - buttonSpacing;
-			ButtonTheme buttonTheme = theme.ChipButton;
+			ButtonTheme buttonTheme = ChipTheme;
 
 			using (UI.CreateMaskScopeMinMax(new Vector2(chipsLeft, 0), new Vector2(statusLeft, barHeight)))
 			{
@@ -361,7 +374,7 @@ namespace DLS.Graphics
 					for (int i = firstButtonIndex; i >= 0; i--)
 					{
 						string chipName = activeCollection.Chips[i];
-						UI.Button(chipName, DrawSettings.ActiveUITheme.ChipButton, buttonLayoutPos, new Vector2(0, buttonHeight), false, true, false, Anchor.BottomLeft, false, 0);
+						UI.Button(chipName, ChipTheme, buttonLayoutPos, new Vector2(0, buttonHeight), false, true, false, Anchor.BottomLeft, false, 0);
 						buttonLayoutPos = UI.PrevBounds.TopLeft + Vector2.up * buttonSpacing;
 
 						// Stop if approaching top of screen (we'll draw the rest of the collection starting on a new line)
@@ -407,7 +420,7 @@ namespace DLS.Graphics
 		{
 			int pressedIndex = -1;
 			int endIndex = startIndex - count + 1;
-			ButtonTheme theme = DrawSettings.ActiveUITheme.ChipButton;
+			ButtonTheme theme = ChipTheme;
 			DevChipInstance viewedChip = Project.ActiveProject.ViewedChip;
 			bool ignoreInputs = ContextMenu.HasFocus();
 

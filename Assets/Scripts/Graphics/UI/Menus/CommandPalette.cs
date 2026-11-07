@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using DLS.Description;
 using DLS.Game;
 using Seb.Helpers;
@@ -39,6 +40,7 @@ namespace DLS.Graphics
 			}
 		}
 
+		const string CommandKind = "";
 		static readonly List<Item> items = new();
 		static string query = string.Empty;
 		static int selected;
@@ -69,6 +71,8 @@ namespace DLS.Graphics
 		{
 			MenuHelper.DrawBackgroundOverlay();
 			InputFieldTheme inputTheme = MenuHelper.Theme.ChipNameInputField;
+			inputTheme.font = MenuHelper.Theme.FontRegular;
+			inputTheme.fontSize = 1.25f;
 			Vector2 topLeft = new(UI.Centre.x - Width / 2, UI.Height - 6f);
 
 			Draw.ID panelID = UI.ReservePanel();
@@ -136,8 +140,9 @@ namespace DLS.Graphics
 			Color textCol = item.Enabled ? Color.white : RewiredUI.DimText;
 			Color detailCol = isSelected ? new Color(1, 1, 1, 0.8f) : RewiredUI.DimText;
 
-			const float kindWidth = 5.4f;
-			DesktopTheme.Text(item.Kind, row.CentreLeft + Vector2.right * 1f, 0.38f, detailCol, Anchor.TextCentreLeft, true);
+			// Chips are tagged ADD or EDIT; commands are not tagged.
+			const float kindWidth = 4.2f;
+			if (item.Kind != CommandKind) DesktopTheme.Text(item.Kind, row.CentreLeft + Vector2.right * 1f, 0.38f, detailCol, Anchor.TextCentreLeft, true);
 			float labelLeft = row.Left + 1f + kindWidth;
 			float detailWidth = string.IsNullOrEmpty(item.Detail) ? 0 : Mathf.Min(DesktopTheme.TextWidth(item.Detail, 0.44f) + 1f, Width * 0.4f);
 			DesktopTheme.Text(DesktopTheme.Fit(item.Label, row.Right - labelLeft - detailWidth - 1f, 0.54f, true), new Vector2(labelLeft, row.Centre.y), 0.54f, textCol, Anchor.TextCentreLeft, true);
@@ -232,6 +237,7 @@ namespace DLS.Graphics
 
 				string name = chip.Name;
 				bool canAdd = canEdit && project.ViewedChip.CanAddSubchip(name);
+				if (!searching && !canAdd) continue;
 				items.Add(new Item(name, "ADD", MobilePalette.Describe(project, name), () => SearchPopup.UseChip(name), canAdd, score + 50));
 
 				// Saved chips can also be opened for editing.
@@ -241,8 +247,14 @@ namespace DLS.Graphics
 				}
 			}
 
-			// Best matches first; before anything is typed, commands keep their order after recent chips.
-			if (searching) items.Sort((a, b) => b.Score.CompareTo(a.Score));
+			// Best matches first, what cannot be done now last; before anything is typed, commands
+			// keep their order after the recent chips.
+			if (searching)
+			{
+				List<Item> sorted = items.OrderByDescending(i => i.Enabled).ThenByDescending(i => i.Score).ToList();
+				items.Clear();
+				items.AddRange(sorted);
+			}
 			else
 			{
 				List<Item> chips = items.FindAll(i => i.Kind == "ADD");
@@ -263,7 +275,9 @@ namespace DLS.Graphics
 					if (binding.IsBound) detail = binding.ToDisplayString();
 				}
 
-				items.Add(new Item(label, "DO", detail, run, enabled, score));
+				// Before anything is typed, only what can be done now is listed.
+				if (!searching && !enabled) return;
+				items.Add(new Item(label, CommandKind, detail, run, enabled, score));
 			}
 		}
 	}
