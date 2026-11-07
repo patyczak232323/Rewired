@@ -77,7 +77,7 @@ namespace DLS.Graphics
 			{
 				actions.Clear();
 				actions.Add(("SAVE CHIP", () => UIDrawer.SetActiveMenu(UIDrawer.MenuType.ChipSave), true, false));
-				actions.Add(("NEW CHIP", () => MobileUI.CreateNewChip(project), true, false));
+				actions.Add(("NEW CHIP", BottomBarUI.CreateNewChip, true, false));
 				y = DrawActions(left, y - 0.6f, width, unsaved ? 0 : -1);
 			}
 

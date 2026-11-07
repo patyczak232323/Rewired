@@ -73,6 +73,7 @@ namespace DLS.Graphics
 
 			Draw.ID panelID = UI.ReservePanel();
 			Item? toRun = null;
+			Bounds2D card;
 
 			using (UI.BeginBoundsScope(true))
 			{
@@ -108,7 +109,8 @@ namespace DLS.Graphics
 					UI.OverridePreviousBounds(Bounds2D.CreateFromTopLeftAndSize(new Vector2(topLeft.x, y), new Vector2(Width, 1.8f)));
 				}
 
-				MenuHelper.DrawReservedMenuPanel(panelID, UI.GetCurrentBoundsScope());
+				card = UI.GetCurrentBoundsScope();
+				MenuHelper.DrawReservedMenuPanel(panelID, card);
 			}
 
 			if (KeyboardShortcuts.ConfirmShortcutTriggered && selected >= 0 && selected < items.Count) toRun = items[selected];
@@ -120,7 +122,8 @@ namespace DLS.Graphics
 				return;
 			}
 
-			bool clickedOutside = InputHelper.IsMouseDownThisFrame(MouseButton.Left) && !UI.IsMouseOverUIThisFrame;
+			// The dimmed board behind counts as interface too, so look at the card itself.
+			bool clickedOutside = InputHelper.IsMouseDownThisFrame(MouseButton.Left) && !UI.MouseInsideBounds(Bounds2D.Grow(card, 1f)) && Time.frameCount != openedFrame;
 			if (KeyboardShortcuts.CancelShortcutTriggered || clickedOutside || (KeyboardShortcuts.CommandPaletteShortcutTriggered && Time.frameCount != openedFrame))
 			{
 				UIDrawer.SetActiveMenu(UIDrawer.MenuType.None);

@@ -78,6 +78,7 @@ namespace DLS.Graphics
 			float columnWidth = (Width - ColumnGap) / 2;
 			Vector2 topLeft = new(UI.Centre.x - Width / 2, UI.Height - 4.5f);
 			bool close;
+			Bounds2D card;
 
 			using (UI.BeginBoundsScope(true))
 			{
@@ -92,10 +93,12 @@ namespace DLS.Graphics
 				Vector2 closeSize = new(10f, 2.4f);
 				close = DesktopTheme.Button("CLOSE", DesktopTheme.Neutral, new Vector2(topLeft.x + Width - closeSize.x, bottom), closeSize);
 
-				MenuHelper.DrawReservedMenuPanel(panelID, UI.GetCurrentBoundsScope());
+				card = UI.GetCurrentBoundsScope();
+				MenuHelper.DrawReservedMenuPanel(panelID, card);
 			}
 
-			bool clickedOutside = InputHelper.IsMouseDownThisFrame(MouseButton.Left) && !UI.IsMouseOverUIThisFrame;
+			// The dimmed board behind counts as interface too, so look at the card itself.
+			bool clickedOutside = InputHelper.IsMouseDownThisFrame(MouseButton.Left) && !UI.MouseInsideBounds(Bounds2D.Grow(card, 1f));
 			if (close || clickedOutside || KeyboardShortcuts.CancelShortcutTriggered || KeyboardShortcuts.ShortcutsHelpShortcutTriggered)
 			{
 				UIDrawer.SetActiveMenu(UIDrawer.MenuType.None);

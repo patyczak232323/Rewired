@@ -119,13 +119,25 @@ For difficult circuits, use the simulation diagnostics and profiling tools descr
 
 - **Truth table**: right-click a custom chip (on Android, tap it) and pick *TRUTH TABLE* to see every input combination. *RECORD TEST* saves the table; the test re-runs whenever the window opens, so a later change that breaks the chip shows up in red.
 - **Breakpoints**: right-click a pin (on Android, tap it) and pick *BREAKPOINT* to pause the simulation when it changes, rises, falls or reaches a value. *SPACE* (or *STEP* on Android) then advances one tick at a time.
-- **Export**: *EXPORT* in a chip's menu or the bottom-bar menu (*MENU* on Android) writes structural Verilog (also copied to the clipboard), an SVG schematic or a PNG screenshot to the project's `Exports` folder. On Android 10 and later each export is also copied to `Download/Rewired`, and *SHARE LAST EXPORT* sends it to another app.
+- **Export**: *EXPORT* in a chip's menu or in *MENU* (top left) writes structural Verilog (also copied to the clipboard), an SVG schematic or a PNG screenshot to the project's `Exports` folder. On Android 10 and later each export is also copied to `Download/Rewired`, and *SHARE LAST EXPORT* sends it to another app.
+
+## Desktop controls
+
+The editor has a top bar, the *PARTS* panel on the left, the *DETAILS* panel on the right and the board between them. The bar along the bottom holds the chips and collections you have starred.
+
+- **Top bar**: *MENU* (new chip, save, chip library, preferences, RHDL Studio, diagnostics, export, keyboard shortcuts, main menu), the chip being edited and its project (with *NOT SAVED* when it has changes, and the step count while the simulation is paused), undo and redo, *RUN*/*PAUSE* and *STEP*, *Search*, zoom and *FIT*, and the buttons that show or hide the two panels. Rest the mouse on a button to see what it does and its shortcut.
+- **Add parts**: drag a part from *PARTS* onto the board, or click it and then click the board. Click a collection's name to open or close it; *MY CHIPS* lists the chips you have saved. Right-click a part for its menu.
+- **Details**: with nothing selected the panel describes the chip being edited. Click a part to see its pins and buttons for everything in its right-click menu; with several parts selected it offers duplicate, copy, mirror and delete.
+- **Search** (*Ctrl+K*): type part of a name to add a chip, open a saved chip for editing, or run any command. Up and Down choose, Enter runs, Esc closes.
+- **Shortcuts** (*F1*): every keyboard shortcut and mouse gesture on one card.
+- **Start screen**: the projects you used last open with one click, and the examples (*Snake*, *CPU8*, *Core8*) are listed below them. An example you deleted is copied back when you open it.
 
 ## Desktop editing shortcuts
 
 - **Ctrl+A** selects every part of the chip you are editing.
 - **Ctrl+C** copies the selected parts and the wires between them; **Ctrl+X** also deletes them. **Ctrl+V** pastes them at the mouse; click to put them down. A copy can be pasted into another chip or project. Chips the target cannot use (missing from the project, or ones that contain the chip being edited) are left out.
 - **Ctrl+Z** undoes; **Ctrl+Shift+Z** or **Ctrl+Y** redoes. **Shift+D** duplicates the selection.
+- **Ctrl+K** searches parts and commands, **F1** lists every shortcut, **Ctrl+B** and **Ctrl+I** show or hide the parts and details panels.
 - All of these can be changed in *Settings* on the home screen.
 
 ## Android controls
