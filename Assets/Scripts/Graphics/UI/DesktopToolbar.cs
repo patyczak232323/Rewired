@@ -1,3 +1,4 @@
+using System.Linq;
 using DLS.Description;
 using DLS.Game;
 using Seb.Types;
@@ -86,7 +87,8 @@ namespace DLS.Graphics
 			const float lineScale = 0.48f;
 			float lineY = centreY - 0.62f;
 			float lineX = x;
-			string first = viewingInside ? project.viewedChipsString + "  •  view only" : project.description.ProjectName;
+			// Inside a chip: the way in from the chip being edited, e.g. "Cpu8Computer > Cpu8".
+			string first = viewingInside ? string.Join(" > ", project.chipViewStack.Reverse().Select(c => c.ChipName)) + "  •  view only" : project.description.ProjectName;
 			lineX = DrawSegment(first, lineX, x + width, lineY, lineScale, RewiredUI.DimText);
 
 			if (!viewingInside && RewiredUI.ActiveChipHasUnsavedChanges(project))
