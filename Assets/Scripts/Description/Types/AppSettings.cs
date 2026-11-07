@@ -30,7 +30,11 @@ namespace DLS.Description
 		Copy,
 		Cut,
 		Paste,
-		RedoAlternative
+		RedoAlternative,
+		CommandPalette,
+		ShortcutsHelp,
+		TogglePartsPanel,
+		ToggleInspector
 	}
 
 	public struct ShortcutBinding
@@ -253,7 +257,11 @@ namespace DLS.Description
 				new ShortcutBinding(ShortcutAction.Copy, KeyCode.C, ctrl: true),
 				new ShortcutBinding(ShortcutAction.Cut, KeyCode.X, ctrl: true),
 				new ShortcutBinding(ShortcutAction.Paste, KeyCode.V, ctrl: true),
-				new ShortcutBinding(ShortcutAction.RedoAlternative, KeyCode.Y, ctrl: true)
+				new ShortcutBinding(ShortcutAction.RedoAlternative, KeyCode.Y, ctrl: true),
+				new ShortcutBinding(ShortcutAction.CommandPalette, KeyCode.K, ctrl: true),
+				new ShortcutBinding(ShortcutAction.ShortcutsHelp, KeyCode.F1),
+				new ShortcutBinding(ShortcutAction.TogglePartsPanel, KeyCode.B, ctrl: true),
+				new ShortcutBinding(ShortcutAction.ToggleInspector, KeyCode.I, ctrl: true)
 			};
 	}
 }

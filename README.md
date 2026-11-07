@@ -23,7 +23,7 @@ Free and open source · Windows · Linux · Android · MIT licence
 <a href="https://github.com/patyczak232323/Rewired/stargazers"><img src="https://img.shields.io/github/stars/patyczak232323/Rewired?style=social" alt="Stars"></a>
 </p>
 
-<p align="center"><img src="Docs/images/snake-pix6.png" alt="Rewired running the bundled Snake project: the PIX6 processor drives a 64 by 64 colour screen, with W A S D keys, a clock and a power-on reset wired to it" width="900"></p>
+<p align="center"><img src="Docs/images/snake-pix6.png" alt="Rewired editing the bundled Snake project: the parts panel on the left, the PIX6 processor driving a 64 by 64 colour screen in the middle, the details panel on the right and the top bar with undo, run, step, search and zoom" width="900"></p>
 <p align="center"><i>The Snake project that ships with Rewired: a small processor made of logic gates, a 64×64 screen and four keys.</i></p>
 
 **Rewired** is a free, open-source **digital logic simulator** and **logic gate circuit simulator** for learning **digital electronics**, **Boolean logic** and **computer architecture**. Start with a single NAND gate, build your own chips, and keep going until you have an ALU, registers, RAM and a working CPU. Rewired is a desktop and Android app built with Unity, with a deterministic, JIT-accelerated simulation engine and **RHDL**, a small **hardware description language** in plain words that turns source code into gate-level circuits.
@@ -36,7 +36,7 @@ Rewired is based on Sebastian Lague's [Digital Logic Sim](https://github.com/Seb
 |---|---|
 | <img src="Docs/images/rhdl-studio.png" alt="RHDL Studio: an 8-bit ALU written in RHDL, with the compiler status and a quick reference" width="440"> | <img src="Docs/images/rhdl-generated-alu.png" alt="The ALU from RHDL Studio built as a circuit of NAND gates in the editor" width="440"> |
 
-<p align="center"><img src="Docs/images/main-menu.png" alt="Rewired main menu" width="600"></p>
+<p align="center"><img src="Docs/images/main-menu.png" alt="Rewired start screen: recent projects and the bundled Snake, CPU8 and Core8 examples next to the main buttons" width="700"></p>
 
 ## Who it is for
 
@@ -82,7 +82,8 @@ The repository includes a compact example progression ending with a **4-bit CPU*
 - breakpoints: pause when a pin changes, rises, falls or reaches a value
 - export to structural Verilog, SVG schematics and PNG screenshots
 - 64 x 64 colour screen (4 bits per channel, double-buffered) for games and graphics demos
-- Snake example project, installed on first start
+- Snake, CPU8 and Core8 example projects, installed on first start and listed on the start screen
+- desktop editor with a parts panel, a details panel for the selection, search for parts and commands (Ctrl+K) and a list of every shortcut (F1)
 - updates from GitHub Releases inside the app on Windows, Linux and Android
 - Windows x64, Linux x86_64, WebGL (browser) and Android ARM64 (experimental) release builds
 - touch interface for Android tablets and phones, held sideways or upright (Settings → Screen): drag parts from a categorised panel, tap a part for its actions, one-finger panning, on-screen keys for KEY chips (play Snake without a keyboard) and a step-by-step guide

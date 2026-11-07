@@ -46,28 +46,38 @@ namespace DLS.Game
 			foreach (string name in BundledProjectInstaller.ProjectNames)
 			{
 				if (installed.Contains(name)) continue;
+				if (!InstallBundledProject(name)) continue;
 
-				try
-				{
-					string folder = $"{BundledProjectInstaller.ResourcesFolder}/{name}";
-					TextAsset project = Resources.Load<TextAsset>($"{folder}/ProjectDescription");
-					if (project == null) continue;
-
-					TextAsset[] chips = Resources.LoadAll<TextAsset>($"{folder}/Chips");
-					BundledProjectInstaller.Install(name, project.text, chips.Select(c => c.text));
-					installed.Add(name);
-					changed = true;
-				}
-				catch (Exception e)
-				{
-					Debug.LogWarning($"Could not install the example project '{name}': {e.Message}");
-				}
+				installed.Add(name);
+				changed = true;
 			}
 
 			if (!changed) return;
 			AppSettings settings = ActiveAppSettings;
 			settings.InstalledBundledProjects = installed.ToArray();
 			SaveAppSettings(settings);
+		}
+
+		// Copies one example project into the projects folder, unless a project of that name is
+		// there already (the start screen also uses this to bring back a deleted example).
+		// Returns false if the example could not be read.
+		public static bool InstallBundledProject(string name)
+		{
+			try
+			{
+				string folder = $"{BundledProjectInstaller.ResourcesFolder}/{name}";
+				TextAsset project = Resources.Load<TextAsset>($"{folder}/ProjectDescription");
+				if (project == null) return false;
+
+				TextAsset[] chips = Resources.LoadAll<TextAsset>($"{folder}/Chips");
+				BundledProjectInstaller.Install(name, project.text, chips.Select(c => c.text));
+				return true;
+			}
+			catch (Exception e)
+			{
+				Debug.LogWarning($"Could not install the example project '{name}': {e.Message}");
+				return false;
+			}
 		}
 
 		// Saves settings that do not change the window (unlike SaveAndApplyAppSettings).

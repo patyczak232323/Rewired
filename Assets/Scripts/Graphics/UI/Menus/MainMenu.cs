@@ -159,6 +159,7 @@ namespace DLS.Graphics
 			activeMenuScreen = MenuScreen.Main;
 			activePopup = PopupKind.None;
 			selectedProjectIndex = -1;
+			RefreshLoadedProjects();
 		}
 
 		static void DrawBranding()
@@ -190,14 +191,31 @@ namespace DLS.Graphics
 			UI.DrawText(subtitle, FontType.Born2bSporty, subtitleFontSize, subtitleTop, Anchor.CentreTop, subtitleCol);
 		}
 
+		// The examples that come with Rewired, with a line on what each one is.
+		static readonly (string name, string about)[] examples =
+		{
+			("Snake", "a game on a pixel screen, played with W A S D"),
+			("CPU8", "an 8-bit CPU with its own ROM and RAM"),
+			("Core8", "an 8-bit processor core built from NAND gates")
+		};
+
+		const int RecentProjectCount = 5;
+
 		static void DrawMainScreen()
 		{
 			if (activePopup != PopupKind.None) return;
 
 			DrawSettings.UIThemeDLS theme = DrawSettings.ActiveUITheme;
-			float buttonWidth = 15;
+			const float buttonWidth = 15;
+			const float columnGap = 4;
+			const float cardWidth = 40;
 
-			int buttonIndex = UI.VerticalButtonGroup(menuButtonNames, theme.MainMenuButtonTheme, UI.Centre + Vector2.up * 6, new Vector2(buttonWidth, 0), false, true, 1);
+			// The buttons on the left, recent projects and the examples on the right; the two
+			// centred together under the title.
+			float groupLeft = UI.Centre.x - (buttonWidth + columnGap + cardWidth) / 2;
+			Vector2 firstButtonCentre = new(groupLeft + buttonWidth / 2, UI.Centre.y + 6);
+			int buttonIndex = UI.VerticalButtonGroup(menuButtonNames, theme.MainMenuButtonTheme, firstButtonCentre, new Vector2(buttonWidth, 0), false, true, 1);
+			DrawStartCard(new Vector2(groupLeft + buttonWidth + columnGap, firstButtonCentre.y + 1.35f), cardWidth);
 
 			if (buttonIndex == 0 || KeyboardShortcuts.MainMenu_NewProjectShortcutTriggered) // New project
 			{
@@ -224,6 +242,74 @@ namespace DLS.Graphics
 			{
 				Quit();
 			}
+		}
+
+		static void DrawStartCard(Vector2 topLeft, float width)
+		{
+			DrawSettings.UIThemeDLS theme = DrawSettings.ActiveUITheme;
+			const float rowHeight = 2.5f;
+			const float textPad = 1.2f;
+			if (allProjectDescriptions == null) RefreshLoadedProjects();
+
+			Bounds2D header = RewiredUI.DrawSectionHeader("RECENT PROJECTS", topLeft, width, false);
+			float y = header.Bottom - 0.4f;
+
+			int[] recent = Enumerable.Range(0, allProjectDescriptions.Length)
+				.OrderByDescending(i => LastUsed(allProjectDescriptions[i]))
+				.Take(RecentProjectCount)
+				.ToArray();
+
+			if (recent.Length == 0)
+			{
+				RewiredUI.DrawLabel("No projects yet. Start one with NEW PROJECT, or open an example.", new Vector2(topLeft.x + textPad, y - rowHeight / 2), false, 0.55f, RewiredUI.DimText);
+				y -= rowHeight;
+			}
+
+			foreach (int i in recent)
+			{
+				ProjectDescription desc = allProjectDescriptions[i];
+				bool compatible = projectCompatibilities[i].compatible;
+				ButtonTheme rowTheme = theme.ProjectSelectionButton;
+				if (!compatible) rowTheme.textCols.normal.a = 0.5f;
+
+				if (UI.Button(desc.ProjectName, rowTheme, new Vector2(topLeft.x, y), new Vector2(width, rowHeight), compatible, false, false, Anchor.TopLeft, true, textPad))
+				{
+					Main.CreateOrLoadProject(desc.ProjectName, string.Empty);
+					return;
+				}
+
+				Bounds2D row = UI.PrevBounds;
+				UI.DrawText(projectSummaries[i], theme.FontRegular, theme.FontSizeRegular * 0.62f, row.CentreRight + Vector2.left * textPad, Anchor.TextCentreRight, new Color(1, 1, 1, 0.45f));
+				UI.OverridePreviousBounds(row);
+				y -= rowHeight + 0.15f;
+			}
+
+			y -= 1.2f;
+			header = RewiredUI.DrawSectionHeader("EXAMPLES", new Vector2(topLeft.x, y), width, false);
+			y = header.Bottom - 0.4f;
+
+			foreach ((string name, string about) in examples)
+			{
+				if (UI.Button(name, theme.ProjectSelectionButton, new Vector2(topLeft.x, y), new Vector2(width, rowHeight), true, false, false, Anchor.TopLeft, true, textPad))
+				{
+					OpenExample(name);
+					return;
+				}
+
+				Bounds2D row = UI.PrevBounds;
+				UI.DrawText(about, theme.FontRegular, theme.FontSizeRegular * 0.62f, row.CentreRight + Vector2.left * textPad, Anchor.TextCentreRight, new Color(1, 1, 1, 0.45f));
+				UI.OverridePreviousBounds(row);
+				y -= rowHeight + 0.15f;
+			}
+		}
+
+		static DateTime LastUsed(ProjectDescription desc) => desc.LastSaveTime > desc.CreationTime ? desc.LastSaveTime : desc.CreationTime;
+
+		// Opens an example; one that was deleted is copied back first.
+		static void OpenExample(string name)
+		{
+			if (!Loader.ProjectExists(name) && !Main.InstallBundledProject(name)) return;
+			Main.CreateOrLoadProject(name, string.Empty);
 		}
 
 		static void DrawLoadProjectScreen()
@@ -350,6 +436,7 @@ namespace DLS.Graphics
 			UI.GetInputFieldState(ID_ProjectNameInput).ClearText();
 			activeMenuScreen = MenuScreen.Main;
 			activePopup = PopupKind.None;
+			RefreshLoadedProjects();
 		}
 
 

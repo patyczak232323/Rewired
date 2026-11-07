@@ -369,7 +369,7 @@ namespace DLS.Graphics
 			ChipDescription.NameMatch(name, project.ActiveDevChipName) ? "open now: can't go inside itself" : "uses the open chip";
 
 		// A few words on what each chip is for, so names like 1-4BIT explain themselves.
-		static string Describe(Project project, string name)
+		public static string Describe(Project project, string name)
 		{
 			if (!project.chipLibrary.TryGetChipDescription(name, out ChipDescription description)) return string.Empty;
 

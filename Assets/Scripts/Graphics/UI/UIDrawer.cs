@@ -26,7 +26,9 @@ namespace DLS.Graphics
 			TruthTable,
 			Export,
 			Breakpoint,
-			MobileHelp
+			MobileHelp,
+			CommandPalette,
+			ShortcutsHelp
 		}
 
 		static MenuType activeMenuOld;
@@ -73,7 +75,21 @@ namespace DLS.Graphics
 		{
 			MenuType menuToDraw = ActiveMenu; // cache state in case it changes while drawing/updating the menus
 
-			if (menuToDraw is not MenuType.ChipCustomization and not MenuType.SimulationDiagnostics and not MenuType.RhdlStudio) BottomBarUI.DrawUI(project);
+			// The editor's bars and side panels; full-screen tools cover them.
+			bool drawEditorChrome = menuToDraw is not MenuType.ChipCustomization and not MenuType.SimulationDiagnostics and not MenuType.RhdlStudio;
+			if (drawEditorChrome)
+			{
+				DesktopPartsPanel.Draw(project);
+				DesktopInspector.Draw(project);
+				// Text is drawn above the shapes of its layer, so whatever can open over the side
+				// panels (the bottom bar's collections, the menu, other menus) starts a new layer.
+				UI.StartNewLayer();
+				BottomBarUI.DrawUI(project);
+				DesktopToolbar.Draw(project);
+				UI.StartNewLayer();
+				BottomBarUI.DrawMenuPopup();
+				HandleDesktopShortcuts(project);
+			}
 
 			if (menuToDraw == MenuType.ChipSave) ChipSaveMenu.DrawMenu();
 			else if (menuToDraw == MenuType.ChipLibrary) ChipLibraryMenu.DrawMenu();
@@ -91,14 +107,26 @@ namespace DLS.Graphics
 			else if (menuToDraw == MenuType.TruthTable) TruthTableMenu.DrawMenu();
 			else if (menuToDraw == MenuType.Export) ExportMenu.DrawMenu();
 			else if (menuToDraw == MenuType.Breakpoint) BreakpointMenu.DrawMenu();
-			else
-			{
-				bool showSimPausedBanner = project.simPaused;
-				if (showSimPausedBanner) SimPausedUI.DrawPausedBanner();
-				if (project.chipViewStack.Count > 1) ViewedChipsBar.DrawViewedChipsBanner(project, showSimPausedBanner);
-			}
+			else if (menuToDraw == MenuType.CommandPalette) CommandPalette.DrawMenu();
+			else if (menuToDraw == MenuType.ShortcutsHelp) ShortcutsHelpMenu.DrawMenu();
 
 			ContextMenu.Update();
+			if (drawEditorChrome)
+			{
+				UI.StartNewLayer();
+				DesktopTheme.DrawHint();
+			}
+		}
+
+		// Shortcuts of the desktop editor's own bars and panels.
+		static void HandleDesktopShortcuts(Project project)
+		{
+			if (ActiveMenu is not (MenuType.None or MenuType.BottomBarMenuPopup)) return;
+
+			if (KeyboardShortcuts.CommandPaletteShortcutTriggered) CommandPalette.Open();
+			else if (KeyboardShortcuts.ShortcutsHelpShortcutTriggered) SetActiveMenu(MenuType.ShortcutsHelp);
+			else if (KeyboardShortcuts.TogglePartsPanelShortcutTriggered && project.CanEditViewedChip) DesktopLayout.TogglePartsPanel();
+			else if (KeyboardShortcuts.ToggleInspectorShortcutTriggered) DesktopLayout.ToggleInspector();
 		}
 
 		public static bool InInputBlockingMenu() => !(ActiveMenu is MenuType.None or MenuType.BottomBarMenuPopup or MenuType.ChipCustomization);
@@ -130,6 +158,7 @@ namespace DLS.Graphics
 				else if (ActiveMenu == MenuType.TruthTable) TruthTableMenu.OnMenuOpened();
 				else if (ActiveMenu == MenuType.Export) ExportMenu.OnMenuOpened();
 				else if (ActiveMenu == MenuType.Breakpoint) BreakpointMenu.OnMenuOpened();
+				else if (ActiveMenu == MenuType.CommandPalette) CommandPalette.OnMenuOpened();
 
 				if (InInputBlockingMenu() && Project.ActiveProject != null && Project.ActiveProject.controller != null)
 				{
@@ -161,6 +190,7 @@ namespace DLS.Graphics
 			RomEditMenu.Reset();
 			ChipLibraryMenu.Reset();
 			SearchPopup.Reset();
+			DesktopPartsPanel.Reset();
 			MobileUI.Reset();
 		}
 	}
