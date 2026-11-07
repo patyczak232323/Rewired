@@ -20,6 +20,20 @@ namespace DLS.Tests
 		}
 
 		[Test]
+		public void DesktopEditorShortcutsHaveDefaults()
+		{
+			AppSettings settings = AppSettings.Default();
+
+			AssertBinding(settings, ShortcutAction.CommandPalette, KeyCode.K);
+			AssertBinding(settings, ShortcutAction.TogglePartsPanel, KeyCode.B);
+			AssertBinding(settings, ShortcutAction.ToggleInspector, KeyCode.I);
+
+			ShortcutBinding help = settings.GetBinding(ShortcutAction.ShortcutsHelp);
+			Assert.AreEqual(KeyCode.F1, help.Key);
+			Assert.IsFalse(help.Ctrl || help.Shift || help.Alt);
+		}
+
+		[Test]
 		public void DefaultEditorShortcutsDoNotOverlap()
 		{
 			ShortcutBinding[] editor = AppSettings.CreateDefaultKeyBindings()

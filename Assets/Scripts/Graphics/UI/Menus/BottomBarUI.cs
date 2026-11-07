@@ -27,6 +27,7 @@ namespace DLS.Graphics
 			"RHDL STUDIO",
 			"SIM DIAGNOSTICS",
 			"EXPORT",
+			"SHORTCUTS",
 			"MAIN MENU"
 		};
 
@@ -38,7 +39,8 @@ namespace DLS.Graphics
 		const int RhdlButtonIndex = 5;
 		const int DiagnosticsButtonIndex = 6;
 		const int ExportButtonIndex = 7;
-		const int QuitButtonIndex = 8;
+		const int ShortcutsButtonIndex = 8;
+		const int QuitButtonIndex = 9;
 
 		// ---- State ----
 		static float scrollX;
@@ -47,7 +49,6 @@ namespace DLS.Graphics
 		static float mouseDragPrev;
 		static bool closeActiveCollectionMultiModeExit;
 
-		static int toggleMenuFrame;
 		static int collectionInteractFrame;
 		static ChipCollection activeCollection;
 		static Vector2 collectionPopupBottomLeft;
@@ -67,15 +68,16 @@ namespace DLS.Graphics
 		{
 			DrawBottomBar(project);
 
-			if (UIDrawer.ActiveMenu == UIDrawer.MenuType.BottomBarMenuPopup)
-			{
-				DrawPopupMenu();
-			}
-
 			if (UIDrawer.ActiveMenu is UIDrawer.MenuType.BottomBarMenuPopup or UIDrawer.MenuType.None)
 			{
 				HandleKeyboardShortcuts();
 			}
+		}
+
+		// The menu opened from MENU in the top bar, drawn over everything below it.
+		public static void DrawMenuPopup()
+		{
+			if (UIDrawer.ActiveMenu == UIDrawer.MenuType.BottomBarMenuPopup) DrawPopupMenu();
 		}
 
 		static void DrawPopupMenu()
@@ -97,15 +99,15 @@ namespace DLS.Graphics
 			}
 
 			float menuWidth = textPadX * 2 + maxLabelWidth + columnGap + maxShortcutWidth;
-			Vector2 pos = new(buttonSpacing, barHeight + buttonSpacing);
+			Vector2 pos = new(DesktopToolbar.MenuButtonLeft, UI.Height - DesktopLayout.TopBarHeight - buttonSpacing * 2);
 			Vector2 size = new(menuWidth, buttonHeight);
 			Draw.ID panelID = UI.ReservePanel();
 
 			using (UI.BeginBoundsScope(true))
 			{
-				for (int i = menuButtonNames.Length - 1; i >= 0; i--)
+				for (int i = 0; i < menuButtonNames.Length; i++)
 				{
-					bool buttonEnabled = MenuButtonsAndShortcutsEnabled || i is QuitButtonIndex or OptionsButtonIndex or DiagnosticsButtonIndex or RhdlButtonIndex or ExportButtonIndex;
+					bool buttonEnabled = MenuButtonsAndShortcutsEnabled || i is QuitButtonIndex or OptionsButtonIndex or DiagnosticsButtonIndex or RhdlButtonIndex or ExportButtonIndex or ShortcutsButtonIndex;
 					bool pressed = UI.Button(
 						menuButtonNames[i],
 						theme,
@@ -114,7 +116,7 @@ namespace DLS.Graphics
 						buttonEnabled,
 						false,
 						false,
-						Anchor.BottomLeft,
+						Anchor.TopLeft,
 						true,
 						textPadX);
 
@@ -134,7 +136,7 @@ namespace DLS.Graphics
 					}
 
 					if (pressed) ButtonPressed(i);
-					pos = buttonBounds.TopLeft;
+					pos = buttonBounds.BottomLeft;
 				}
 
 				// The same frame as the other menus: an accent line along the top.
@@ -147,7 +149,7 @@ namespace DLS.Graphics
 			// Close if clicked nothing or pressed esc
 			if (UIDrawer.ActiveMenu is UIDrawer.MenuType.BottomBarMenuPopup)
 			{
-				if (InputHelper.IsAnyMouseButtonDownThisFrame_IgnoreConsumed() && Time.frameCount != toggleMenuFrame)
+				if (InputHelper.IsAnyMouseButtonDownThisFrame_IgnoreConsumed() && Time.frameCount != DesktopToolbar.MenuToggleFrame)
 				{
 					UIDrawer.SetActiveMenu(UIDrawer.MenuType.None);
 				}
@@ -168,32 +170,9 @@ namespace DLS.Graphics
 				else if (i == RhdlButtonIndex) OpenRhdlStudio();
 				else if (i == DiagnosticsButtonIndex) OpenDiagnosticsMenu();
 				else if (i == ExportButtonIndex) ExportMenu.Open(Project.ActiveProject.ActiveDevChipName);
+				else if (i == ShortcutsButtonIndex) UIDrawer.SetActiveMenu(UIDrawer.MenuType.ShortcutsHelp);
 				else if (i == QuitButtonIndex) ExitToMainMenu();
 			}
-		}
-
-		// The project and chip being edited, and whether the chip has unsaved changes, at the right
-		// end of the bar. Returns where the status starts, so the chip buttons stop before it.
-		static float DrawChipStatus(Project project)
-		{
-			DrawSettings.UIThemeDLS theme = DrawSettings.ActiveUITheme;
-			const float scale = 0.72f;
-			const float gap = 1.2f;
-			float right = UI.Width - 1f;
-			float y = barHeight / 2;
-
-			bool unsaved = project.CanEditViewedChip && RewiredUI.ActiveChipHasUnsavedChanges(project);
-			if (unsaved)
-			{
-				const string mark = "NOT SAVED";
-				UI.DrawText(mark, theme.FontBold, theme.FontSizeRegular * scale, new Vector2(right, y), Anchor.TextCentreRight, RewiredUI.UnsavedText);
-				right -= MobileTheme.TextWidth(mark, scale, true) + gap;
-			}
-
-			string chipName = string.IsNullOrWhiteSpace(project.ActiveDevChipName) ? "NEW CHIP" : project.ActiveDevChipName;
-			string name = MobileTheme.Fit(project.description.ProjectName + "  /  " + chipName, UI.Width * 0.3f, scale);
-			UI.DrawText(name, theme.FontRegular, theme.FontSizeRegular * scale, new Vector2(right, y), Anchor.TextCentreRight, new Color(1, 1, 1, 0.5f));
-			return right - MobileTheme.TextWidth(name, scale) - gap;
 		}
 
 		static string GetMenuShortcutText(int buttonIndex)
@@ -205,6 +184,7 @@ namespace DLS.Graphics
 				FindChipButtonIndex => KeyboardShortcuts.GetBindingDisplayString(ShortcutAction.Search),
 				LibraryButtonIndex => KeyboardShortcuts.GetBindingDisplayString(ShortcutAction.ChipLibrary),
 				OptionsButtonIndex => KeyboardShortcuts.GetBindingDisplayString(ShortcutAction.Preferences),
+				ShortcutsButtonIndex => KeyboardShortcuts.GetBindingDisplayString(ShortcutAction.ShortcutsHelp),
 				QuitButtonIndex => KeyboardShortcuts.GetBindingDisplayString(ShortcutAction.QuitToMainMenu),
 				_ => string.Empty
 			};
@@ -229,25 +209,17 @@ namespace DLS.Graphics
 			}
 
 			UI.DrawPanel(bounds_UISpace, theme.StarredBarCol);
-			UI.DrawLine(bounds_UISpace.TopLeft, bounds_UISpace.TopRight, 0.06f, RewiredUI.Accent * 0.75f);
-			float statusLeft = DrawChipStatus(project);
+			UI.DrawLine(bounds_UISpace.TopLeft, bounds_UISpace.TopRight, 0.06f, MobileTheme.LineCol);
 
-			// Menu toggle button
-			Vector2 menuButtonPos = new(buttonSpacing, padY);
-			Vector2 menuButtonSize = new(1.5f, barHeight - padY * 2);
-			bool menuButtonEnabled = !inOtherMenu;
-
-			if (UI.Button("MENU", theme.MenuButtonTheme, menuButtonPos, menuButtonSize, menuButtonEnabled, true, false, Anchor.BottomLeft, ignoreInputs: ignoreInputs))
-			{
-				UIDrawer.ToggleBottomPopupMenu();
-				toggleMenuFrame = Time.frameCount;
-			}
-
-
-			// Chips
+			// Starred chips and collections, after a label saying what the bar holds.
+			const string label = "STARRED";
+			const float labelScale = 0.42f;
+			DesktopTheme.Text(label, new Vector2(1f, barHeight / 2), labelScale, RewiredUI.DimText, Anchor.TextCentreLeft, true);
+			float chipsLeft = 1f + DesktopTheme.TextWidth(label, labelScale, true) + 0.8f;
+			float statusLeft = UI.Width - buttonSpacing;
 			ButtonTheme buttonTheme = theme.ChipButton;
 
-			using (UI.CreateMaskScopeMinMax(new Vector2(UI.PrevBounds.Right + buttonSpacing, 0), new Vector2(statusLeft, barHeight)))
+			using (UI.CreateMaskScopeMinMax(new Vector2(chipsLeft, 0), new Vector2(statusLeft, barHeight)))
 			{
 				bool chipButtonsEnabled = !inOtherMenu && project.CanEditViewedChip;
 
@@ -275,7 +247,7 @@ namespace DLS.Graphics
 				}
 
 				// -- Draw --
-				float chipButtonsRegionStartX = UI.PrevBounds.Right + buttonSpacing;
+				float chipButtonsRegionStartX = chipsLeft;
 				float chipButtonRegionWidth = statusLeft - chipButtonsRegionStartX;
 
 				scrollX = Mathf.Clamp(scrollX, Mathf.Min(0, chipButtonRegionWidth - chipBarTotalWidthLastFrame), 0);
@@ -690,7 +662,7 @@ namespace DLS.Graphics
 
 		public static bool MouseIsOverBar() => InputHelper.MouseInBounds_ScreenSpace(barBounds_ScreenSpace);
 
-		static void ExitToMainMenu()
+		public static void ExitToMainMenu()
 		{
 			if (Project.ActiveProject.ActiveChipHasUnsavedChanges()) UnsavedChangesPopup.OpenPopup(ExitIfTrue);
 			else ExitIfTrue(true);
@@ -712,7 +684,7 @@ namespace DLS.Graphics
 		static void OpenRhdlStudio() => UIDrawer.SetActiveMenu(UIDrawer.MenuType.RhdlStudio);
 		static void OpenDiagnosticsMenu() => UIDrawer.SetActiveMenu(UIDrawer.MenuType.SimulationDiagnostics);
 
-		static void CreateNewChip()
+		public static void CreateNewChip()
 		{
 			if (Project.ActiveProject.ActiveChipHasUnsavedChanges()) UnsavedChangesPopup.OpenPopup(ConfirmNewChip);
 			else ConfirmNewChip(true);

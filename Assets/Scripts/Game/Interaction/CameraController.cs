@@ -207,6 +207,12 @@ namespace DLS.Game
 			MovePosition(worldBefore - worldAfter);
 		}
 
+		// The zoom shown in the desktop top bar: 100% is the zoom a new chip opens at.
+		public static float ZoomPercent => activeView == null ? 100 : StartupOrthoSize / activeView.OrthoSize * 100;
+
+		// Zooms around the middle of the part of the screen the board takes up.
+		public static void ZoomAroundBoardCentre(float factor) => ZoomAround(DesktopLayout.BoardRectPixels.center, factor);
+
 		/// <summary>
 		/// Native touch navigation for mobile builds. The previous/current centres are
 		/// screen-space pinch centres; distance ratio controls zoom. Keeping the old
@@ -321,12 +327,17 @@ namespace DLS.Game
 				return view;
 			}
 
+			// Fit the chip between the top and bottom bars and the open side panels, and centre it there.
+			Rect board = DesktopLayout.BoardRectPixels;
+			float screenHeight = Mathf.Max(1f, Screen.height);
+			float boardFitHeight = bounds.Height * screenHeight / Mathf.Max(1f, board.height);
+			float boardFitWidth = bounds.Width * screenHeight / Mathf.Max(1f, board.width);
+			view.OrthoSize = Mathf.Max(boardFitHeight, boardFitWidth) * 0.5f * 1.1f;
 			view.OrthoSize = Mathf.Clamp(view.OrthoSize, zoomRange.x, zoomRange.y);
 
-			// Move cam down slightly from bounds centre to account for bottom region of screen blocked by chip bar
-			const float uiScreenHeight = UI.DefaultWidth * 9 / 16f;
-			float bottomBarWorldHeight = BottomBarUI.barHeight / uiScreenHeight * view.OrthoSize * 2;
-			view.Pos = bounds.Centre + Vector2.down * bottomBarWorldHeight / 2;
+			float worldPerPixel = view.OrthoSize * 2 / screenHeight;
+			Vector2 boardOffsetPixels = board.center - new Vector2(Screen.width, Screen.height) / 2f;
+			view.Pos = bounds.Centre - boardOffsetPixels * worldPerPixel;
 			return view;
 		}
 

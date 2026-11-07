@@ -300,7 +300,7 @@ namespace DLS.Graphics
 			CreateFilteredChipsList(string.Empty);
 		}
 
-		static void UseChip(string chipName)
+		public static void UseChip(string chipName)
 		{
 			AddRecentChip(chipName);
 			Project.ActiveProject.controller.StartPlacing(chipName);
@@ -308,7 +308,7 @@ namespace DLS.Graphics
 		}
 
 
-		static void OpenChip(string chipName)
+		public static void OpenChip(string chipName)
 		{
 			Project project = Project.ActiveProject;
 
@@ -338,6 +338,8 @@ namespace DLS.Graphics
 		}
 
 		public static void ClearRecentChips() => recentChipNames.Clear();
+
+		public static bool IsRecentChip(string chipName) => recentChipNames.Exists(n => ChipDescription.NameMatch(n, chipName));
 
 		public static void Reset()
 		{
