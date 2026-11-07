@@ -19,6 +19,10 @@ namespace DLS.Game
 		public static bool CreateNewChipShortcutTriggered => Triggered(ShortcutAction.CreateNewChip);
 		public static bool QuitToMainMenuShortcutTriggered => Triggered(ShortcutAction.QuitToMainMenu);
 		public static bool SearchShortcutTriggered => Triggered(ShortcutAction.Search);
+		public static bool CommandPaletteShortcutTriggered => Triggered(ShortcutAction.CommandPalette);
+		public static bool ShortcutsHelpShortcutTriggered => Triggered(ShortcutAction.ShortcutsHelp);
+		public static bool TogglePartsPanelShortcutTriggered => Triggered(ShortcutAction.TogglePartsPanel);
+		public static bool ToggleInspectorShortcutTriggered => Triggered(ShortcutAction.ToggleInspector);
 
 		// ---- Editing shortcuts ----
 		public static bool DuplicateShortcutTriggered => Triggered(ShortcutAction.Duplicate);
@@ -92,6 +96,10 @@ namespace DLS.Game
 				ShortcutAction.Cut => "Cut",
 				ShortcutAction.Paste => "Paste",
 				ShortcutAction.RedoAlternative => "Redo (Alternative)",
+				ShortcutAction.CommandPalette => "Search Parts And Commands",
+				ShortcutAction.ShortcutsHelp => "Keyboard Shortcuts",
+				ShortcutAction.TogglePartsPanel => "Show / Hide Parts Panel",
+				ShortcutAction.ToggleInspector => "Show / Hide Details Panel",
 				_ => action.ToString()
 			};
 
