@@ -5,8 +5,8 @@ using UnityEngine;
 namespace DLS.Graphics
 {
 	// The Rewired logo: a chip with a gold R on it, drawn with UI shapes. The app icon
-	// (Assets/Build/Icon.png) is the same drawing on a rounded square, drawn by
-	// Tools/Logo/make_logo.py with the same geometry (unit square -1..1, y up).
+	// (Assets/Build/Icon.png) is the same drawing on a rounded square
+	// with the same geometry (unit square -1..1, y up).
 	public static class RewiredLogo
 	{
 		static readonly Color Body = ColHelper.MakeCol255(30, 33, 50);
