@@ -16,7 +16,8 @@ Documentation for **Rewired**, the digital logic simulator, circuit editor and R
 
 ## Releases
 
-- **[Rewired v0.6.0](RELEASE_0.6.0.md)**
+- **[Rewired v0.7.0](RELEASE_0.7.0.md)**
+- [Rewired v0.6.0](RELEASE_0.6.0.md)
 - [Rewired v0.5.2](RELEASE_0.5.2.md)
 - [Rewired v0.5.1](RELEASE_0.5.1.md)
 - [Rewired v0.5.0](RELEASE_0.5.0.md)
