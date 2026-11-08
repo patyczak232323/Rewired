@@ -395,7 +395,7 @@ namespace DLS.Game
 				return chip.Elements.Count > 0;
 			}
 
-			ChipDescription saved = Saver.WithEditorPinColours(chip.LastSavedDescription, library);
+			ChipDescription saved = DescriptionCreator.WithEditorSize(Saver.WithEditorPinColours(chip.LastSavedDescription, library));
 			return Saver.HasUnsavedChanges(saved, DescriptionCreator.CreateChipDescription(chip));
 		}
 
