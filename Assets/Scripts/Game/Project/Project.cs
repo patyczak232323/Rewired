@@ -383,16 +383,20 @@ namespace DLS.Game
 			return true;
 		}
 
-		public bool ActiveChipHasUnsavedChanges()
+		public bool ActiveChipHasUnsavedChanges() => HasUnsavedChanges(ViewedChip, chipLibrary);
+
+		// Compares a chip with its saved description, as the editor would describe that description:
+		// with the editor's pin colours and at least the size its pins and name need.
+		public static bool HasUnsavedChanges(DevChipInstance chip, ChipLibrary library)
 		{
 			// If chip has no last saved description, then has unsaved changes if any elements have been placed inside it
-			if (ViewedChip.LastSavedDescription == null)
+			if (chip.LastSavedDescription == null)
 			{
-				return ViewedChip.Elements.Count > 0;
+				return chip.Elements.Count > 0;
 			}
 
-			ChipDescription saved = Saver.WithEditorPinColours(ViewedChip.LastSavedDescription, chipLibrary);
-			return Saver.HasUnsavedChanges(saved, DescriptionCreator.CreateChipDescription(ViewedChip));
+			ChipDescription saved = Saver.WithEditorPinColours(chip.LastSavedDescription, library);
+			return Saver.HasUnsavedChanges(saved, DescriptionCreator.CreateChipDescription(chip));
 		}
 
 		public void CreateBlankDevChip()

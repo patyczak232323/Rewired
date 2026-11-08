@@ -49,6 +49,22 @@ namespace DLS.SaveSystem
 			};
 		}
 
+		// The editor shows and saves a chip at least as large as its pins and name need. A chip
+		// saved smaller (chips built by RHDL are saved at 2 x 2) is therefore the same chip at the
+		// larger size; returns the description at that size (a copy, if it changes).
+		public static ChipDescription WithEditorSize(ChipDescription saved)
+		{
+			if (saved == null) return null;
+			PinDescription[] inputs = saved.InputPins ?? Array.Empty<PinDescription>();
+			PinDescription[] outputs = saved.OutputPins ?? Array.Empty<PinDescription>();
+			Vector2 size = Vector2.Max(SubChipInstance.CalculateMinChipSize(inputs, outputs, saved.Name), saved.Size);
+			if (size == saved.Size) return saved;
+
+			ChipDescription resized = Saver.CloneChipDescription(saved);
+			resized.Size = size;
+			return resized;
+		}
+
 		static IOrderedEnumerable<DevPinInstance> OrderPins(IEnumerable<DevPinInstance> pins)
 		{
 			return pins.OrderByDescending(p => p.Position.y).ThenBy(p => p.Position.x);
