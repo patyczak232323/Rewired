@@ -1,0 +1,6 @@
+# 3-input AND from two AND gates.
+chip And3
+    in A, B, C
+    out Y
+
+    Y = And(And(A, B), C)

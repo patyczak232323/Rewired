@@ -1,0 +1,8 @@
+# Full adder: two half adders and an OR for the carry.
+chip FullAdder
+    in A, B, CIN
+    out S, COUT
+
+    s1, c1 = HalfAdder(A, B)
+    S, c2 = HalfAdder(s1, CIN)
+    COUT = Or(c1, c2)

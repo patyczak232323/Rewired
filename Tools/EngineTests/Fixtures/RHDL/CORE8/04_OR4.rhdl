@@ -1,0 +1,6 @@
+# 4-input OR from three OR gates.
+chip Or4
+    in A, B, C, D
+    out Y
+
+    Y = Or(Or(A, B), Or(C, D))

@@ -1,0 +1,10 @@
+# 8-bit incrementer: Y = A + 1, a chain of eight half adders.
+# Used by the program counter; 0xFF + 1 wraps to 0x00.
+chip Inc8
+    in A: 8
+    out Y: 8
+
+    carry = 0b1
+    for i in 0..7
+        Y[i], carry = HalfAdder(A[i], carry)
+    end

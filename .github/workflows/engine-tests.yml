@@ -1,0 +1,65 @@
+name: Engine tests
+
+# Builds the simulation engine, RHDL and the save system with plain .NET (no Unity) and runs
+# Tools/EngineTests. Runs on GitHub-hosted runners only: it needs no Unity licence, and the
+# self-hosted machine stays free for the Unity builds that share it.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Assets/Scripts/**"
+      - "Assets/Resources/**"
+      - "Tools/EngineTests/**"
+      - ".github/workflows/engine-tests.yml"
+  pull_request:
+    paths:
+      - "Assets/Scripts/**"
+      - "Assets/Resources/**"
+      - "Tools/EngineTests/**"
+      - ".github/workflows/engine-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests and benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # The Verilog export tests simulate the exported designs; without it they are skipped.
+      - name: Install Icarus Verilog
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends iverilog
+
+      - name: Build
+        run: dotnet build Tools/EngineTests -nologo
+
+      - name: Tests
+        run: dotnet test Tools/EngineTests --no-build -nologo --filter "Category!=Benchmark"
+
+      # The same tests with every gate program interpreted, the way IL2CPP builds (Android,
+      # WebGL) run them because they cannot generate code at run time.
+      - name: Tests on the interpreter (IL2CPP path)
+        env:
+          REWIRED_FORCE_INTERPRETER: "1"
+        run: dotnet test Tools/EngineTests --no-build -nologo --filter "Category!=Benchmark"
+
+      # In their own process: building large lookup tables in the background would otherwise
+      # slow the tests down and the timings would mean less.
+      - name: Benchmarks
+        run: dotnet test Tools/EngineTests --no-build -nologo --filter "Category=Benchmark" --logger "console;verbosity=normal"

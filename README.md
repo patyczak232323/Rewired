@@ -93,6 +93,111 @@ Most DLS projects open fine, but don't expect them to behave exactly the same. I
 
 If you find a circuit that clearly behaves wrong, please open an issue and attach the project. Sequential stuff, feedback loops and big nested chips are the most useful to see.
 
+## How the simulator works
+
+This part is for people who want the details. Everything lives in `Assets/Scripts/Simulation`; the editor talks to it only through `RewiredEngine`.
+
+### The netlist
+
+When a project opens, or the circuit changes, the chip tree is flattened once into plain arrays (`DeterministicSimulator.EnsureTopology`):
+
+- every pin gets an index, and the wires become two **compressed sparse row** tables: for each source pin the range of target pins it drives, and for each target pin the range of pins driving it. Propagation then walks contiguous `int[]` ranges instead of one managed array per pin;
+- the pins of a plain **NAND** gate (most of any circuit) are looked up once, so evaluating one is `1 ^ (a.State & b.State & 1)` with no per-gate type switch;
+- custom-chip boundary pins that have a single driver are **pass-through** pins. They are resolved immediately when their driver changes, recursively up to depth 64, instead of taking a trip through the queue. Wires have no delay, so the result and the delta cycle it lands in are the same either way.
+
+A pin state is one `uint`: up to 16 bit values in the low half and a tri-state flag per bit in the high half.
+
+### One simulation step
+
+`RunSimulationStep` does, in order:
+
+1. copy the input pins the user set into the netlist;
+2. update the **frame sources**: clocks (high or low from `frame / stepsPerClockTransition`) and KEY chips;
+3. **settle** the combinational logic;
+4. advance the **sequential** parts: PULSE timers and the displays (on a clock edge the 64×64 screen writes a pixel into its back buffer, and copies that to the picture shown when REFRESH is high);
+5. settle again;
+6. update buzzers, record waveforms and replay data.
+
+### Settling: delta cycles
+
+Settling is event driven and runs in **delta cycles**. Changed pins queue the pins they drive (a ring buffer, each pin at most once); resolving a target marks the chip that owns it dirty. Each delta cycle then evaluates every dirty chip against the current pin states and **stages** the results, and only after the whole batch are the staged outputs **committed** and their fan-out queued for the next cycle. All gates in a cycle therefore switch at the same time, so the result never depends on the order gates happen to be visited in. That is the main difference from the original Digital Logic Sim.
+
+A circuit that does not settle is stopped after `max(256, chips + 64)` delta cycles, or when one chip is evaluated more than 256 times in one settle, and the diagnostics name the chips involved.
+
+A pin driven by several sources (a bus with tri-state buffers) is resolved bit by bit: a tri-stated driver never wins, and on a real conflict between two active drivers one bit value is picked at random and the contention is reported.
+
+### Power-on
+
+A circuit that has just been built has no history, so a latch made of two NANDs has no defined state. On power-on (only for a new root circuit, never on an edit) every chip is marked dirty and evaluated one at a time in a **random order**, each result committed immediately, until nothing changes or a budget of `max(4096, 512 × chips)` evaluations runs out. That models the tiny delay differences that decide which side of a real latch wins. No clock edge, RAM write or pulse is created during power-on.
+
+### Accelerators
+
+Three accelerators replace whole custom chips once they are proven equivalent. Each one is chosen per chip, falls back to the gate-level engine when it does not apply, and is checked against it by the tests.
+
+- **FULL LUT** (`CombinationalChipCache`). A pure combinational chip (no state, no feedback, one driver per net) with at most 24 input bits gets a lookup table of all its outputs, built on a background thread (in parallel chunks of 4096 entries for big tables). Evaluating the chip is then one array read. Tables are saved per project in `Cache/FullLUT/*.dlscache`, keyed by a SHA-256 fingerprint of the chip's logic including every nested chip, so a table is reused across sessions and thrown away as soon as anything inside changes.
+- **Combinational JIT** (`CombinationalJitCompiler`). Chips that pass the same analysis are also flattened into a list of primitive operations over slots of a `uint[]`, sorted topologically and emitted as IL with `DynamicMethod` (256 operations per method), which the runtime compiles to machine code. One evaluation is one straight-line function call. It runs the chip whenever no table is ready: while one is being built, and for good when the chip has too many inputs or the table would be too big.
+- **Feedback JIT** (`FeedbackJitCompiler`). Chips with loops (latches, registers, counters, up to 1024 primitives) are compiled the same way, but run as **sweeps**: each sweep reads the previous state array and writes the next one, exactly like a delta cycle evaluates every gate at once, and sweeps repeat until nothing changes. If the inputs did not change since the last converged state, the chip is not evaluated at all. A program that does not converge within `max(256, primitives + 64)` sweeps is switched off for that chip and the gate-level engine takes over.
+
+### Android and the browser: the gate program interpreter
+
+The two JITs need to generate code while the app runs. Android and WebGL builds are compiled ahead of time with **IL2CPP**, which cannot do that, so until now those platforms ran without either JIT: only the lookup tables and the gate-level engine.
+
+They now run the same compiled operation lists on an interpreter, `GateProgram`:
+
+- the operations are encoded as one `int[]` stream with constants in a separate table. Consecutive NANDs of two slots (most of a program) form a **run** that a tight loop executes without a `switch`: `write[d] = ((read[a] & read[b]) ^ 1) & 1`. Every other operation (tri-state buffer, bus split and merge, 4+4→8 merge, copy) is a line-by-line translation of the IL the JIT emits;
+- for feedback chips the interpreter does not run full sweeps. It **settles**: the first sweep after the chip is synchronised evaluates every operation, after that each sweep evaluates only the operations that read a slot that changed in the sweep before, and all results of a sweep are committed together. An operation whose inputs did not change would only recompute the value it already holds, so after every sweep the state is identical to what full sweeps give, including the number of sweeps reported and the state left behind when a chip does not converge;
+- IL2CPP builds pick the interpreter up front (`ENABLE_IL2CPP`), and every other platform falls back to it if creating a `DynamicMethod` fails;
+- the hottest loops (the interpreter and the delta-cycle core) are marked with `Il2CppSetOption` to drop IL2CPP's null and array-bounds checks. Every index used there comes from tables the engine built for exactly those arrays.
+
+The desktop builds (Mono) keep the generated machine code.
+
+How the interpreter is checked:
+
+- every chip of the example projects, plus two chips that use every primitive the compilers support, is compiled both ways and both programs get the same random signals (tri-state flags and constants included), compared slot by slot;
+- the settling executor and the native full-sweep executor run side by side on random input sequences, compared after every step: outputs, convergence, sweep count and the state of every gate, including a ring oscillator that never settles;
+- the whole test suite runs a second time with every program interpreted (`REWIRED_FORCE_INTERPRETER=1`);
+- the tests themselves were checked by deliberately breaking each operation of the interpreter and each step of the settling logic, one at a time: every break makes them fail, except one change that turned out to give identical results anyway (treating a state that did not converge as settled: the operations still marked from its last sweep are exactly the ones a full sweep would change).
+
+### Threads
+
+On the desktop and Android the simulation runs on its own thread and paces itself to the target steps per second: it sleeps when the remaining wait is 0.25 ms or more and only yields for shorter gaps. In the browser there are no threads, so the simulation runs inside each frame for up to 10 ms.
+
+The main thread reads the keyboard once a frame and publishes the held keys as an **immutable snapshot**. The simulation thread asks about every KEY chip on every step and only reads that reference, so the two threads never wait on a lock for it.
+
+### The RHDL compiler
+
+`RhdlCompiler` parses the source, elaborates it into a netlist of bits (`RhdlElaborator`), turns that into an ordinary chip, and draws it with a layered (Sugiyama) layout (`RhdlLayout`): columns by longest path with feedback wires reversed, crossings reduced by barycentre ordering, vertical positions by isotonic regression, and a track for every vertical wire segment. The layout was most of the compile time; three quadratic steps are now near-linear with exactly the same output:
+
+- crossings between two columns are counted as inversions with a merge sort instead of comparing every pair of wires;
+- the "this wire must use a track left of that one" constraints are found through 0.001-wide height buckets instead of comparing every pair of wire heights, keeping the order the constraints are added in;
+- parts without inputs and latch pairs are found from precomputed sets instead of rescanning every wire for every part.
+
+The output was compared byte for byte on all 708 chips the tests compile, before and after.
+
+### Measured speed
+
+The engine tests in `Tools/EngineTests` include benchmarks of the bundled projects. Measured with .NET 8 on an x86-64 Linux machine (release build, median of 7 runs). A phone is slower in absolute terms, but the ratios between the paths carry over:
+
+| Project | IL2CPP before (LUT only) | IL2CPP now (interpreter) | Desktop (JIT) |
+| --- | ---: | ---: | ---: |
+| Snake | 24,200 steps/s | 49,200 steps/s (2.0×) | 40,200 steps/s |
+| CPU8 | 710 steps/s | 6,570 steps/s (9.3×) | 11,100 steps/s |
+| Core8 | 61,300 steps/s | 174,500 steps/s (2.8×) | 138,200 steps/s |
+
+Compiling the PIX6 processor (1565 gates) from RHDL went from about 690 ms to about 200 ms.
+
+### Tests
+
+`Tools/EngineTests` builds the engine, RHDL and the save system with plain .NET (stand-ins for the few Unity types are in `Stubs/`) and runs 187 NUnit tests in about half a minute, without starting Unity:
+
+```bash
+dotnet test Tools/EngineTests --filter "Category!=Benchmark"                                # tests
+REWIRED_FORCE_INTERPRETER=1 dotnet test Tools/EngineTests --filter "Category!=Benchmark"    # same, on the IL2CPP path
+dotnet test Tools/EngineTests --filter "Category=Benchmark"                                 # benchmarks
+```
+
+The tests live outside `Assets/`, so Unity never imports them and the app builds are unaffected. The RHDL sources the example projects were built from are in `Tools/EngineTests/Fixtures`. The benchmarks fail when the work per step (gate evaluations, propagations) grows more than 25% over `benchmark-baseline.json`, which catches an accelerator that silently stops engaging. CI (`engine-tests.yml`) runs all three on GitHub-hosted runners, so the self-hosted machine stays free for the Unity builds.
+
 ## Building
 
 You need the Unity version from `ProjectSettings/ProjectVersion.txt`.
@@ -106,6 +211,7 @@ Then open the folder in Unity Hub.
 Release builds run on GitHub Actions on self-hosted runners (`Tools/SelfHostedRunners` has the setup script). The workflows need `UNITY_LICENSE`, `UNITY_EMAIL`, `UNITY_PASSWORD`, and for Android `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASS`, `ANDROID_KEYALIAS_NAME`, `ANDROID_KEYALIAS_PASS`.
 
 - Every push to `main` updates the `android-unofficial` pre-release with fresh builds (`unofficial-build.yml`).
+- Changes to the engine run the engine tests (`engine-tests.yml`, see [Tests](#tests)).
 - `pages.yml` publishes the website in `site/` to GitHub Pages, with the browser build from the latest release under `play/`. It runs after every release and when `site/` changes.
 - For a release: bump the version in `VERSION`, `Main.RewiredVersion` and `bundleVersion` in `ProjectSettings/ProjectSettings.asset`, merge to `main` and run `release.yml` (or push a `v*` tag matching `VERSION`).
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using DLS.Description;
 using DLS.Game;
+using Unity.IL2CPP.CompilerServices;
 
 namespace DLS.Simulation
 {
@@ -119,6 +120,7 @@ namespace DLS.Simulation
 			}
 		}
 
+		[Il2CppSetOption(Option.NullChecks, false), Il2CppSetOption(Option.ArrayBoundsChecks, false)]
 		sealed class PinQueue : IEnumerable<int>
 		{
 			readonly int[] items;
@@ -1031,6 +1033,7 @@ namespace DLS.Simulation
 			return false;
 		}
 
+		[Il2CppSetOption(Option.NullChecks, false), Il2CppSetOption(Option.ArrayBoundsChecks, false)]
 		static (bool converged, int deltaCycles) SettleCombinational()
 		{
 			int deltaCycles = 0;
@@ -1170,6 +1173,7 @@ namespace DLS.Simulation
 			return true;
 		}
 
+		[Il2CppSetOption(Option.NullChecks, false), Il2CppSetOption(Option.ArrayBoundsChecks, false)]
 		static void DrainTargetQueue()
 		{
 			while (targetQueue.Count > 0)
@@ -1181,6 +1185,7 @@ namespace DLS.Simulation
 			}
 		}
 
+		[Il2CppSetOption(Option.NullChecks, false), Il2CppSetOption(Option.ArrayBoundsChecks, false)]
 		static void ResolveTargetPin(int targetIndex, int triggeringSourceIndex)
 		{
 			int sourceStart = sourceOffsetsByTarget[targetIndex];
@@ -1506,12 +1511,14 @@ namespace DLS.Simulation
 
 		static int GetAddress8Bit(uint pinState) => PinState.GetBitStates(pinState) & Address8BitMask;
 
+		[Il2CppSetOption(Option.NullChecks, false), Il2CppSetOption(Option.ArrayBoundsChecks, false)]
 		static void StageOutput(int pinIndex, uint state)
 		{
 			if (pins[pinIndex].State == state) return;
 			pendingPinStates.Add(new PendingPinState(pinIndex, state));
 		}
 
+		[Il2CppSetOption(Option.NullChecks, false), Il2CppSetOption(Option.ArrayBoundsChecks, false)]
 		static void CommitPendingOutputs()
 		{
 			for (int i = 0; i < pendingPinStates.Count; i++)
@@ -1528,6 +1535,7 @@ namespace DLS.Simulation
 			pendingPinStates.Clear();
 		}
 
+		[Il2CppSetOption(Option.NullChecks, false), Il2CppSetOption(Option.ArrayBoundsChecks, false)]
 		static void QueueFanout(int sourceIndex)
 		{
 			int targetStart = targetOffsetsBySource[sourceIndex];
@@ -1725,6 +1733,7 @@ namespace DLS.Simulation
 			}
 		}
 
+		[Il2CppSetOption(Option.NullChecks, false), Il2CppSetOption(Option.ArrayBoundsChecks, false)]
 		static void MarkDirty(int chipIndex)
 		{
 			if (chipIndex < 0 || dirtyChipFlags[chipIndex]) return;

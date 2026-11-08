@@ -1,0 +1,27 @@
+{
+  "_comment": "Work per step measured on the fixed benchmark workloads. A run fails when a value grows more than 25% over these. Lower a value when an optimisation reduces it; raise it only with a reason in the commit message.",
+  "MaxGateEvaluationsPerStep": {
+    "ALU8 random inputs (Reference)": 298.7,
+    "ALU8 random inputs (NativeJit)": 1.0,
+    "CPU4 counter (Reference)": 315.3,
+    "CPU4 counter (FeedbackJit)": 137.0,
+    "Snake (Interpreted)": 298.1,
+    "Snake (Native)": 298.1,
+    "CPU8 (Interpreted)": 267.0,
+    "CPU8 (Native)": 267.0,
+    "Core8 (Interpreted)": 19.2,
+    "Core8 (Native)": 19.2
+  },
+  "MaxSignalPropagationsPerStep": {
+    "ALU8 random inputs (Reference)": 359.1,
+    "ALU8 random inputs (NativeJit)": 4.5,
+    "CPU4 counter (Reference)": 401.5,
+    "CPU4 counter (FeedbackJit)": 156.9,
+    "Snake (Interpreted)": 354.2,
+    "Snake (Native)": 354.2,
+    "CPU8 (Interpreted)": 286.0,
+    "CPU8 (Native)": 286.0,
+    "Core8 (Interpreted)": 36.9,
+    "Core8 (Native)": 36.9
+  }
+}

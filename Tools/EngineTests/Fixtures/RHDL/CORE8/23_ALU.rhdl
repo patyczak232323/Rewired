@@ -1,0 +1,26 @@
+# 8-bit ALU.
+#   L1 L0 = 00: Y = A + B, or A - B when SUB=1 (A + NOT B + 1)
+#           01: Y = A AND B
+#           10: Y = A OR B
+#           11: Y = A XOR B
+# C is the adder's carry out for 00 and 0 for the logic operations. After a
+# subtraction C=1 means "no borrow" (A >= B).
+chip Alu
+    in A: 8, B: 8, SUB, L0, L1
+    out Y: 8, C, Z
+
+    wire b: 8
+    wire a_and_b: 8
+    wire a_or_b: 8
+    wire a_xor_b: 8
+    for i in 0..7
+        b[i] = Xor(B[i], SUB)
+        a_and_b[i] = And(A[i], B[i])
+        a_or_b[i] = Or(A[i], B[i])
+        a_xor_b[i] = Xor(A[i], B[i])
+    end
+    sum, carry = Add8(A, b, SUB)
+
+    Y = Mux4x8(sum, a_and_b, a_or_b, a_xor_b, L0, L1)
+    C = And(carry, Not(Or(L0, L1)))
+    Z = IsZero8(Y)
