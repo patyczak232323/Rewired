@@ -8,10 +8,7 @@ Free and open source · Windows · Linux · Android · MIT licence
 </p>
 
 <p align="center">
-<a href="https://github.com/patyczak232323/Rewired/releases/latest"><b>⬇ Download the latest release</b></a> ·
-<a href="Docs/GETTING_STARTED.md">Getting Started</a> ·
-<a href="Docs/RHDL_GUIDE.md">RHDL Guide</a> ·
-<a href="Examples/RHDL/">Examples</a>
+<a href="https://github.com/patyczak232323/Rewired/releases/latest"><b>⬇ Download the latest release</b></a>
 </p>
 
 <p align="center">
@@ -98,7 +95,7 @@ Release packages:
 
 - Windows x64: `DLSRewired-Windows-x64.zip`
 - Linux x86_64: `DLSRewired-Linux-x86_64.zip`
-- WebGL (browser): `DLSRewired-WebGL.zip`. Unzip it and serve the folder from any static web host (see [Getting Started](Docs/GETTING_STARTED.md)).
+- WebGL (browser): `DLSRewired-WebGL.zip`. Unzip it and serve the folder from any static web host.
 - Android ARM64 (experimental): `DLSRewired-Android-arm64.apk`
 
 On Linux, after extracting the archive, the executable may need permission:
@@ -115,8 +112,6 @@ Rewired checks GitHub for a newer release when it starts (turn this off in Setti
 - **Windows and Linux**: *Update* downloads the release, quits Rewired, copies the new files over the installed ones and starts the new version. If the install folder is not writable, the release page opens instead.
 - **Android**: *Update* downloads the new APK and installs it, then Rewired closes; open it again to use the new version. The first time, Android asks to allow installs from Rewired and to confirm the update. After that, Android 12 and newer install updates without asking. Projects are kept.
 - **WebGL**: the site is updated by whoever hosts it.
-
-For a first project, see **[Getting Started](Docs/GETTING_STARTED.md)**.
 
 ## RHDL — hardware description language
 
@@ -144,56 +139,13 @@ RHDL supports:
 - feedback and memory: a name can be used above the line that assigns it
 - constant folding, shared gates and readable left-to-right schematics
 
-See the **[RHDL Guide](Docs/RHDL_GUIDE.md)**.
+## Bundled projects
 
-## Examples
+Rewired installs three example computers, all built from NAND gates:
 
-The curated RHDL examples are intentionally small and easy to follow:
-
-```text
-AND
- └─ Half Adder
-     └─ Full Adder
-         └─ MUX4
-             └─ D Flip-Flop
-                 └─ 4-bit Register
-                     ├─ RAM 4×4
-                     ├─ CPU4
-                     └─ 8-bit Register
-                         └─ PIX6 computer + 64×64 screen
-```
-
-Files are under **[Examples/RHDL](Examples/RHDL/)**.
-
-### CPU4
-
-CPU4 is a simple educational processor example with:
-
-- 4-bit accumulator
-- 4-bit program counter
-- 4-bit output port
-- 16 program addresses
-- fixed 8-bit instructions
-- arithmetic, logic, jumps, output and halt
-
-See **[CPU4 documentation](Examples/RHDL/CPU4/README.md)**.
-
-### PIX6
-
-PIX6 is a small computer that draws on the 64 × 64 colour screen:
-
-- X and Y pen registers, a 12-bit colour register and an 8-bit program counter
-- 16-bit instructions: set and move the pen, set or generate a colour, plot, clear, show, read the screen, keys, random numbers, jumps, halt
-- a 12-instruction program that fills the screen with a colour pattern and draws a diagonal, and a moving-dot animation
-- **Snake** in 70 instructions, installed as the first project when Rewired starts: open it and play with W A S D
-
-See **[PIX6 documentation](Examples/RHDL/PIX6/README.md)**.
-
-### RAM4x4
-
-The memory example contains four 4-bit words built from normal RHDL registers rather than a hidden RAM primitive.
-
-See **[RAM4x4 documentation](Examples/RHDL/Memory/README.md)**.
+- **Snake** on the PIX6 computer and its 64 × 64 colour screen: open it and play with W A S D
+- **CPU8**, an 8-bit single-cycle CPU with its own ROM and RAM
+- **Core8**, an 8-bit processor core
 
 ## Simulation engine
 
@@ -214,12 +166,6 @@ Editor / Project / UI
 
 The goal is predictable simulation semantics while still allowing acceleration of suitable circuit regions.
 
-More detail:
-
-- **[Simulation Diagnostics](Docs/SIMULATION_DIAGNOSTICS.md)**
-- **[Native JIT](Docs/NATIVE_JIT.md)**
-- **[Persistent FULL LUT Cache](Docs/PERSISTENT_FULL_LUT_CACHE.md)**
-
 ## Compatibility with Digital Logic Sim
 
 Rewired keeps much of the original Digital Logic Sim editor workflow, project structure and visual language, so many existing projects can be opened.
@@ -237,19 +183,6 @@ may behave differently under Rewired's deterministic simulation model.
 
 Rewired is therefore best considered a separate **digital circuit simulator** derived from the original project.
 
-## Documentation
-
-Start here:
-
-- **[Documentation index](Docs/README.md)**
-- **[Getting Started](Docs/GETTING_STARTED.md)**
-- **[RHDL Guide](Docs/RHDL_GUIDE.md)**
-- **[Simulation Diagnostics](Docs/SIMULATION_DIAGNOSTICS.md)**
-- **[Native JIT](Docs/NATIVE_JIT.md)**
-- **[Persistent FULL LUT Cache](Docs/PERSISTENT_FULL_LUT_CACHE.md)**
-- **[Rewired v0.7.0 release notes](Docs/RELEASE_0.7.0.md)**
-- **[Contributing](CONTRIBUTING.md)**
-
 ## Development
 
 Current version: **Rewired v0.7.0**
@@ -263,21 +196,10 @@ git clone https://github.com/patyczak232323/Rewired.git
 cd Rewired
 ```
 
-Tests:
+Builds for Windows, Linux, WebGL and Android run on GitHub Actions (`.github/workflows`). Unity runs on the self-hosted runners labelled `self-hosted, trusted`; `Tools/SelfHostedRunners` sets them up. The workflows need the secrets `UNITY_LICENSE`, `UNITY_EMAIL`, `UNITY_PASSWORD`, and for Android the release key `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASS`, `ANDROID_KEYALIAS_NAME`, `ANDROID_KEYALIAS_PASS`.
 
-- **Unity EditMode tests** in `Assets/Tests/EditMode` run the real C# engine, compile and simulate every example in `Examples/RHDL`, and compile every RHDL circuit shown in the documentation. Run them from *Window → General → Test Runner* in the Unity editor; CI runs them in `unity-tests.yml`.
-- **Engine harness** (`Tools/EngineHarness`) runs the same EditMode tests with plain .NET in under two minutes, simulates exported Verilog with Icarus Verilog, and benchmarks the engine. See its README. Run the tests with `dotnet test Tools/EngineHarness --filter "Category!=Benchmark"` (the .NET 8 SDK is enough; Unity is not needed).
-- **Python regression suites** in `Tools/` check solver rules and source-level invariants without Unity:
-
-```bash
-python3 Tools/SimulationRegression/regression.py
-python3 Tools/ComputerRegression/regression.py
-python3 Tools/ProgramRegression/regression.py
-```
-
-Release builds for Windows, Linux, WebGL and Android are produced automatically by GitHub Actions when a version tag such as `v0.4.0` is pushed; the tests run first and the tag must match `VERSION`. The release text comes from `Docs/RELEASE_<version>.md` when that file exists. Every change to `main` also refreshes the `android-unofficial` pre-release with development builds for all platforms.
-
-See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the repository layout, coding conventions and the release checklist.
+- Every change to `main` refreshes the `android-unofficial` pre-release with development builds for all platforms (`unofficial-build.yml`).
+- To release, set the new version in `VERSION`, `Main.RewiredVersion` and `bundleVersion` in `ProjectSettings/ProjectSettings.asset`, merge to `main`, then run `release.yml` on `main` from the Actions tab (or push a tag such as `v0.8.0` that matches `VERSION`).
 
 ## Project status
 

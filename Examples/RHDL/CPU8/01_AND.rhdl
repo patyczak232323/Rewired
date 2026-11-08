@@ -1,6 +1,0 @@
-# AND gate: NAND followed by NOT.
-chip And
-    in A, B
-    out Y
-
-    Y = Not(NAND(A, B))

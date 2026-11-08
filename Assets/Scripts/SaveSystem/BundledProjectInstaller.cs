@@ -5,8 +5,7 @@ using DLS.Description;
 namespace DLS.SaveSystem
 {
 	// Example projects that come with Rewired. Their files live in
-	// Assets/Resources/BundledProjects/<name> (ProjectDescription.json and Chips/*.json) and are
-	// written by BundledProjectTests from the sources in Examples/.
+	// Assets/Resources/BundledProjects/<name> (ProjectDescription.json and Chips/*.json).
 	public static class BundledProjectInstaller
 	{
 		public const string ResourcesFolder = "BundledProjects";
