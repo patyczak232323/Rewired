@@ -72,6 +72,12 @@ namespace Seb.Vis.Text.Rendering
 
 		public void Render(CommandBuffer cmd)
 		{
+			if (Draw.UseMeshRendering)
+			{
+				RenderAsMesh(cmd);
+				return;
+			}
+
 			// Create buffers
 			ComputeHelper.CreateArgsBuffer(ref argsBuffer, quadMesh, perGlyphInstanceData.Count);
 			ComputeHelper.CreateStructuredBuffer_DontShrink(ref instanceDataBuffer, perGlyphInstanceData);
@@ -88,6 +94,90 @@ namespace Seb.Vis.Text.Rendering
 			// Render
 			// Note: world bounds are: (globalOffset + boundsCentre, boundsSize)
 			cmd.DrawMeshInstancedIndirect(quadMesh, 0, fontMat, 0, argsBuffer, 0);
+		}
+
+		// ---- Drawing without structured buffers (Draw.UseMeshRendering) ----
+		// Each glyph becomes four vertices of an ordinary mesh carrying its position, size, colour,
+		// mask and where its curves start; the curves are read from float textures (TextShaderMesh).
+
+		const string MeshShaderFileName = "TextShaderMesh";
+		static readonly int id_bezierTex = Shader.PropertyToID("BezierTex");
+		static readonly int id_glyphMetaTex = Shader.PropertyToID("GlyphMetaTex");
+		static readonly int id_dataTexWidth = Shader.PropertyToID("DataTexWidth");
+
+		static readonly Vector3[] glyphCorners = { new(-0.5f, 0.5f), new(0.5f, 0.5f), new(-0.5f, -0.5f), new(0.5f, -0.5f) };
+		static readonly Vector2[] glyphCornerUVs = { new(0, 1), new(1, 1), new(0, 0), new(1, 0) };
+
+		Mesh glyphMesh;
+		Material meshFontMat;
+		readonly List<Vector3> meshVertices = new();
+		readonly List<Vector2> meshUVs = new();
+		readonly List<Vector4> meshPosSize = new();
+		readonly List<Vector4> meshFontData = new();
+		readonly List<Vector4> meshCols = new();
+		readonly List<Vector4> meshMasks = new();
+		readonly List<int> meshIndices = new();
+
+		void RenderAsMesh(CommandBuffer cmd)
+		{
+			if (perGlyphInstanceData.Count == 0) return;
+			if (meshFontMat == null) meshFontMat = new Material(Resources.Load<Shader>(MeshShaderFileName));
+			if (glyphMesh == null)
+			{
+				glyphMesh = new Mesh();
+				glyphMesh.MarkDynamic();
+			}
+
+			meshVertices.Clear();
+			meshUVs.Clear();
+			meshPosSize.Clear();
+			meshFontData.Clear();
+			meshCols.Clear();
+			meshMasks.Clear();
+			meshIndices.Clear();
+
+			foreach (InstanceData glyph in perGlyphInstanceData)
+			{
+				TextGroup group = textGroups[glyph.groupIndex];
+				Vector4 posSize = new(glyph.pos.x + group.Offset.x, glyph.pos.y + group.Offset.y, glyph.sizeEm.x, glyph.sizeEm.y);
+				Vector4 fontData = new(glyph.fontSize, glyph.dataOffset, group.UseScreenSpace, 0);
+				Vector4 mask = new(group.MaskMin.x, group.MaskMin.y, group.MaskMax.x, group.MaskMax.y);
+
+				int first = meshVertices.Count;
+				for (int corner = 0; corner < 4; corner++)
+				{
+					meshVertices.Add(glyphCorners[corner]);
+					meshUVs.Add(glyphCornerUVs[corner]);
+					meshPosSize.Add(posSize);
+					meshFontData.Add(fontData);
+					meshCols.Add(glyph.col);
+					meshMasks.Add(mask);
+				}
+
+				meshIndices.Add(first);
+				meshIndices.Add(first + 1);
+				meshIndices.Add(first + 2);
+				meshIndices.Add(first + 2);
+				meshIndices.Add(first + 1);
+				meshIndices.Add(first + 3);
+			}
+
+			glyphMesh.Clear();
+			glyphMesh.indexFormat = meshVertices.Count > ushort.MaxValue ? IndexFormat.UInt32 : IndexFormat.UInt16;
+			glyphMesh.SetVertices(meshVertices);
+			glyphMesh.SetUVs(0, meshUVs);
+			glyphMesh.SetUVs(1, meshPosSize);
+			glyphMesh.SetUVs(2, meshFontData);
+			glyphMesh.SetUVs(3, meshCols);
+			glyphMesh.SetUVs(4, meshMasks);
+			glyphMesh.SetTriangles(meshIndices, 0, false);
+			// Glyphs are placed by the shader, so the mesh's own bounds mean nothing; keep it from being culled.
+			glyphMesh.bounds = new Bounds(Vector3.zero, Vector3.one * 1e6f);
+
+			meshFontMat.SetTexture(id_bezierTex, textRenderData.BezierTexture);
+			meshFontMat.SetTexture(id_glyphMetaTex, textRenderData.MetadataTexture);
+			meshFontMat.SetInt(id_dataTexWidth, TextRenderData.DataTextureWidth);
+			cmd.DrawMesh(glyphMesh, Matrix4x4.identity, meshFontMat, 0, 0);
 		}
 
 		public static BoundingBox CalculateLocalBounds(ReadOnlySpan<char> text, FontData fontData, LayoutSettings settings) => CreateTextLayout(text, fontData, settings);
@@ -213,11 +303,16 @@ namespace Seb.Vis.Text.Rendering
 		{
 			ComputeHelper.Release(argsBuffer, instanceDataBuffer, bezierBuffer, metadataBuffer, textGroupBuffer);
 
-			if (fontMat != null)
-			{
-				if (Application.isPlaying) Object.Destroy(fontMat);
-				else Object.DestroyImmediate(fontMat);
-			}
+			DestroyObject(fontMat);
+			DestroyObject(meshFontMat);
+			DestroyObject(glyphMesh);
+		}
+
+		static void DestroyObject(Object obj)
+		{
+			if (obj == null) return;
+			if (Application.isPlaying) Object.Destroy(obj);
+			else Object.DestroyImmediate(obj);
 		}
 
 		public readonly struct InstanceData
