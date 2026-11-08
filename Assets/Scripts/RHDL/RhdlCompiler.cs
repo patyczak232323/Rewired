@@ -99,8 +99,7 @@ namespace DLS.RHDL
 				diagnostics.Add(new RhdlDiagnostic(e.Line, e.Column, e.Message));
 				if (LooksLikeVersion06(source))
 				{
-					diagnostics.Add(new RhdlDiagnostic(0, "This source uses the RHDL 0.6 syntax. " +
-					                                      "See 'Coming from RHDL 0.6' in Docs/RHDL_GUIDE.md for the changes."));
+					diagnostics.Add(new RhdlDiagnostic(0, "This source uses the RHDL 0.6 syntax, which RHDL 2.0 no longer accepts."));
 				}
 
 				return new RhdlCompileResult(null, diagnostics);
