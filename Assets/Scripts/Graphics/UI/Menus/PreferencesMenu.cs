@@ -68,11 +68,15 @@ namespace DLS.Graphics
 		static readonly UIHandle ID_StraightWires = new("PREFS_StraightWires");
 		static readonly UIHandle ID_SimStatus = new("PREFS_SimStatus");
 		static readonly UIHandle ID_SimFrequencyField = new("PREFS_SimTickTarget");
-		static readonly UIHandle ID_ClockSpeedInput = new("PREFS_ClockSpeed");
 
 		static string showGridLabel => "Show grid" + CreateShortcutString(KeyboardShortcuts.GetBindingDisplayString(ShortcutAction.ToggleGrid));
 		static string simStatusLabel => "Sim Status" + CreateShortcutString(KeyboardShortcuts.GetBindingDisplayString(ShortcutAction.SimulationPause));
-		static readonly Func<string, bool> integerInputValidator = ValidateIntegerInput;
+		static readonly Func<string, bool> clockInputValidator = SimulationSpeed.IsValidPartialInput;
+		// The clock field as it was filled in from the project, and the step rate it stood for.
+		// That text always means that rate, so opening the menu (or typing the old value back)
+		// never rounds the stored step rate.
+		static string clockTextFromProject = string.Empty;
+		static int clockTargetFromProject;
 
 		static double simAvgTicksPerSec_delayedRefreshForUI;
 		static float lastSimAvgTicksPerSecRefreshTime;
@@ -119,12 +123,10 @@ namespace DLS.Graphics
 				DrawHeader("SIMULATION:");
 				bool pauseSim = MenuHelper.LabeledOptionsWheel(simStatusLabel, labelCol, labelPosCurr, entrySize, ID_SimStatus, SimulationStatusOptions, settingFieldSize.x, true) == 1;
 				AddSpacing();
-				InputFieldState clockSpeedInputFieldState = MenuHelper.LabeledInputField("Steps per clock tick", labelCol, labelPosCurr, entrySize, ID_ClockSpeedInput, integerInputValidator, settingFieldSize.x, true);
-				AddSpacing();
-				InputFieldState freqState = MenuHelper.LabeledInputField("Steps per second (target)", labelCol, labelPosCurr, entrySize, ID_SimFrequencyField, integerInputValidator, settingFieldSize.x, true);
+				InputFieldState freqState = MenuHelper.LabeledInputField("Clock speed (Hz or MAX)", labelCol, labelPosCurr, entrySize, ID_SimFrequencyField, clockInputValidator, settingFieldSize.x, true);
 				AddSpacing();
 				// Draw current simulation speed
-				Vector2 tickLabelRight = MenuHelper.DrawLabelSectionOfLabelInputPair(labelPosCurr, entrySize, "Steps per second (current)", labelCol * 0.75f, true);
+				Vector2 tickLabelRight = MenuHelper.DrawLabelSectionOfLabelInputPair(labelPosCurr, entrySize, "Clock speed now (Hz)", labelCol * 0.75f, true);
 				UI.DrawPanel(tickLabelRight, settingFieldSize, new Color(0.18f, 0.18f, 0.18f), Anchor.CentreRight);
 				UI.DrawText(currentSimSpeedString, theme.FontBold, theme.FontSizeRegular, tickLabelRight + new Vector2(inputTextPad - settingFieldSize.x, 0), Anchor.TextCentreLeft, currentSimSpeedStringColour);
 
@@ -137,12 +139,7 @@ namespace DLS.Graphics
 				MenuHelper.DrawReservedMenuPanel(panelID, menuBounds);
 
 				// ---- Handle changes ----
-				int.TryParse(clockSpeedInputFieldState.text, out int clockSpeed);
-				clockSpeed = Mathf.Max(1, clockSpeed);
-
-				// Parse target sim tick rate
-				int.TryParse(freqState.text, out int targetSimTicksPerSecond);
-				targetSimTicksPerSecond = Mathf.Max(1, targetSimTicksPerSecond);
+				int targetSimTicksPerSecond = TargetFromClockText(project, freqState.text);
 				if (project.targetTicksPerSecond != targetSimTicksPerSecond || project.simPaused != pauseSim) lastSimTickRateSetTime = Time.time;
 
 				// Assign changes immediately so can see them take effect in background
@@ -152,7 +149,6 @@ namespace DLS.Graphics
 				project.description.Prefs_Snapping = snappingMode;
 				project.description.Prefs_StraightWires = straightWireMode;
 				project.description.Prefs_SimTargetStepsPerSecond = targetSimTicksPerSecond;
-				project.description.Prefs_SimStepsPerClockTick = clockSpeed;
 				project.description.Prefs_SimPaused = pauseSim;
 
 				// Cancel / Confirm
@@ -238,24 +234,13 @@ namespace DLS.Graphics
 				true) == 1;
 			Step(ref right);
 
-			InputFieldState clockSpeed = MenuHelper.LabeledInputField(
-				"Steps / clock",
-				labelCol,
-				right,
-				mobileEntrySize,
-				ID_ClockSpeedInput,
-				integerInputValidator,
-				fieldWidth,
-				true);
-			Step(ref right);
-
 			InputFieldState targetSpeed = MenuHelper.LabeledInputField(
-				"Target steps / s",
+				"Clock Hz or MAX",
 				labelCol,
 				right,
 				mobileEntrySize,
 				ID_SimFrequencyField,
-				integerInputValidator,
+				clockInputValidator,
 				fieldWidth,
 				true);
 			Step(ref right);
@@ -263,7 +248,7 @@ namespace DLS.Graphics
 			Vector2 currentRight = MenuHelper.DrawLabelSectionOfLabelInputPair(
 				right,
 				mobileEntrySize,
-				"Current steps / s",
+				"Clock now (Hz)",
 				labelCol * 0.75f,
 				true);
 			UI.DrawPanel(currentRight, new Vector2(fieldWidth, mobileEntrySize.y), new Color(0.18f, 0.18f, 0.18f), Anchor.CentreRight);
@@ -297,10 +282,7 @@ namespace DLS.Graphics
 				false,
 				Anchor.TopLeft);
 
-			int.TryParse(clockSpeed.text, out int stepsPerClock);
-			stepsPerClock = Mathf.Max(1, stepsPerClock);
-			int.TryParse(targetSpeed.text, out int targetTicks);
-			targetTicks = Mathf.Max(1, targetTicks);
+			int targetTicks = TargetFromClockText(project, targetSpeed.text);
 
 			if (project.targetTicksPerSecond != targetTicks || project.simPaused != pauseSim)
 				lastSimTickRateSetTime = Time.time;
@@ -311,7 +293,6 @@ namespace DLS.Graphics
 			project.description.Prefs_Snapping = snappingMode;
 			project.description.Prefs_StraightWires = straightWireMode;
 			project.description.Prefs_SimTargetStepsPerSecond = targetTicks;
-			project.description.Prefs_SimStepsPerClockTick = stepsPerClock;
 			project.description.Prefs_SimPaused = pauseSim;
 
 			if (cancel || KeyboardShortcuts.CancelShortcutTriggered)
@@ -370,8 +351,9 @@ namespace DLS.Graphics
 			UI.GetWheelSelectorState(ID_StraightWires).index = projDesc.Prefs_StraightWires;
 			UI.GetWheelSelectorState(ID_SimStatus).index = projDesc.Prefs_SimPaused ? 1 : 0;
 			// -- Input fields
-			UI.GetInputFieldState(ID_SimFrequencyField).SetText(projDesc.Prefs_SimTargetStepsPerSecond + "", false);
-			UI.GetInputFieldState(ID_ClockSpeedInput).SetText(projDesc.Prefs_SimStepsPerClockTick + "", false);
+			clockTextFromProject = SimulationSpeed.FormatTarget(projDesc.Prefs_SimTargetStepsPerSecond, projDesc.Prefs_SimStepsPerClockTick);
+			clockTargetFromProject = projDesc.Prefs_SimTargetStepsPerSecond;
+			UI.GetInputFieldState(ID_SimFrequencyField).SetText(clockTextFromProject, false);
 		}
 
 		public static void HandleKeyboardShortcuts()
@@ -411,9 +393,18 @@ namespace DLS.Graphics
 			{
 				simAvgTicksPerSec_delayedRefreshForUI = project.simAvgTicksPerSec;
 				lastSimAvgTicksPerSecRefreshTime = Time.time;
-				currentSimSpeedString = project.simPaused ? "0" : $"{simAvgTicksPerSec_delayedRefreshForUI:0}";
+				currentSimSpeedString = project.simPaused ? "0" : SimulationSpeed.FormatHz(SimulationSpeed.ClockHz(simAvgTicksPerSec_delayedRefreshForUI, project.stepsPerClockTransition));
 				currentSimSpeedStringColour = GetSimFrequencyErrorCol();
 			}
+		}
+
+		// The step rate the clock field asks for. While the entry is empty or incomplete, the
+		// project keeps the rate it has.
+		static int TargetFromClockText(Project project, string text)
+		{
+			if (text == clockTextFromProject) return clockTargetFromProject;
+			int current = project.description.Prefs_SimTargetStepsPerSecond;
+			return SimulationSpeed.TryParse(text, project.stepsPerClockTransition, out int target) ? target : current;
 		}
 
 		public static bool ValidateIntegerInput(string s)
@@ -430,6 +421,10 @@ namespace DLS.Graphics
 			if (Project.ActiveProject.simPaused)
 			{
 				frequencyErrorCol = new Color(1, 1, 1, 0.35f);
+			}
+			else if (SimulationSpeed.IsUnlimited(Project.ActiveProject.description.Prefs_SimTargetStepsPerSecond))
+			{
+				// No target to fall short of.
 			}
 			else
 			{

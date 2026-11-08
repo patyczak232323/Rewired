@@ -162,6 +162,8 @@ How the interpreter is checked:
 
 On the desktop and Android the simulation runs on its own thread and paces itself to the target steps per second: it sleeps when the remaining wait is 0.25 ms or more and only yields for shorter gaps. In the browser there are no threads, so the simulation runs inside each frame for up to 10 ms.
 
+The speed is set in Preferences as one **clock speed in Hz**, or **MAX** for no limit. Projects keep storing it the way Digital Logic Sim does, as steps per second plus steps per clock tick (the clock changes level every that many steps), and the Hz value is converted with the project's steps per clock tick. Every step settles the whole circuit, so steps between clock edges do no work and only the clock speed decides how fast a circuit runs. Steps per clock tick is no longer shown; it stays as saved because PULSE chips count their length in steps. MAX is stored as the largest step rate, so older versions open such a project as "as fast as possible" as well.
+
 The main thread reads the keyboard once a frame and publishes the held keys as an **immutable snapshot**. The simulation thread asks about every KEY chip on every step and only reads that reference, so the two threads never wait on a lock for it.
 
 ### The RHDL compiler
