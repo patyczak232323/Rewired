@@ -98,9 +98,9 @@ Desktop.ini
 __pycache__/
 *.pyc
 
-# Engine harness (dotnet) build output
-/Tools/EngineHarness/bin/
-/Tools/EngineHarness/obj/
-/Tools/EngineHarness/TestResults/
-/Tools/EngineHarness/benchmark-results.json
-!/Tools/EngineHarness/EngineHarness.csproj
+# Engine tests (dotnet) build output
+/Tools/EngineTests/bin/
+/Tools/EngineTests/obj/
+/Tools/EngineTests/TestResults/
+/Tools/EngineTests/benchmark-results.json
+!/Tools/EngineTests/EngineTests.csproj

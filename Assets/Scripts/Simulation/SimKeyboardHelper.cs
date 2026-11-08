@@ -22,6 +22,39 @@ namespace DLS.Simulation
 		static bool HasAnyInput;
 		static bool ReplayOverrideActive;
 
+		// What KeyIsHeld answers from. The sim thread asks for every KEY chip on every step,
+		// thousands of times a second, while the main thread rebuilds the held keys once a
+		// frame. Taking the lock for each question made the two threads fight over it, so
+		// the main thread publishes an immutable copy instead and the sim thread only reads
+		// the reference. A snapshot is never changed after it is published.
+		sealed class Snapshot
+		{
+			public static readonly Snapshot None = new(new HashSet<char>(), false);
+
+			public readonly HashSet<char> Keys;
+			public readonly bool Replay;
+
+			public Snapshot(HashSet<char> keys, bool replay)
+			{
+				Keys = keys;
+				Replay = replay;
+			}
+		}
+
+		static volatile Snapshot published = Snapshot.None;
+
+		// Call with the lock held, after any change to the lookups above.
+		static void Publish()
+		{
+			HashSet<char> source = ReplayOverrideActive ? ReplayKeyLookup : HasAnyInput ? KeyLookup : null;
+			Snapshot current = published;
+			if (current.Replay == ReplayOverrideActive && (source == null ? current.Keys.Count == 0 : current.Keys.SetEquals(source))) return;
+
+			published = source == null || source.Count == 0 && !ReplayOverrideActive
+				? Snapshot.None
+				: new Snapshot(new HashSet<char>(source), ReplayOverrideActive);
+		}
+
 		// The key of a KEY chip held down with a finger, or '\0'. Set from the main thread
 		// before RefreshInputState, so touch screens without a keyboard can press key chips.
 		public static char TouchHeldKey;
@@ -31,26 +64,32 @@ namespace DLS.Simulation
 		{
 			lock (KeyLookup)
 			{
-				KeyLookup.Clear();
-				HasAnyInput = false;
+				ReadHeldKeys();
+				Publish();
+			}
+		}
 
-				if (TouchHeldKey != '\0')
+		static void ReadHeldKeys()
+		{
+			KeyLookup.Clear();
+			HasAnyInput = false;
+
+			if (TouchHeldKey != '\0')
+			{
+				KeyLookup.Add(char.ToUpper(TouchHeldKey));
+				HasAnyInput = true;
+			}
+
+			if (!InputHelper.AnyKeyOrMouseHeldThisFrame) return; // early exit if no key held
+			if (InputHelper.CtrlIsHeld || InputHelper.ShiftIsHeld || InputHelper.AltIsHeld) return; // don't trigger key chips if modifier is held
+
+			foreach (KeyCode key in ValidInputKeys)
+			{
+				if (InputHelper.IsKeyHeld(key))
 				{
-					KeyLookup.Add(char.ToUpper(TouchHeldKey));
+					char keyChar = char.ToUpper((char)key);
+					KeyLookup.Add(keyChar);
 					HasAnyInput = true;
-				}
-
-				if (!InputHelper.AnyKeyOrMouseHeldThisFrame) return; // early exit if no key held
-				if (InputHelper.CtrlIsHeld || InputHelper.ShiftIsHeld || InputHelper.AltIsHeld) return; // don't trigger key chips if modifier is held
-
-				foreach (KeyCode key in ValidInputKeys)
-				{
-					if (InputHelper.IsKeyHeld(key))
-					{
-						char keyChar = char.ToUpper((char)key);
-						KeyLookup.Add(keyChar);
-						HasAnyInput = true;
-					}
 				}
 			}
 		}
@@ -58,16 +97,9 @@ namespace DLS.Simulation
 		// Call from Sim Thread
 		public static bool KeyIsHeld(char key)
 		{
-			bool isHeld;
-
-			lock (KeyLookup)
-			{
-				isHeld = ReplayOverrideActive
-					? ReplayKeyLookup.Contains(char.ToUpper(key))
-					: HasAnyInput && KeyLookup.Contains(key);
-			}
-
-			return isHeld;
+			Snapshot snapshot = published;
+			if (snapshot.Keys.Count == 0) return false;
+			return snapshot.Keys.Contains(snapshot.Replay ? char.ToUpper(key) : key);
 		}
 
 		internal static char[] CaptureHeldKeys()
@@ -97,6 +129,7 @@ namespace DLS.Simulation
 					}
 				}
 				ReplayOverrideActive = true;
+				Publish();
 			}
 		}
 
@@ -106,6 +139,7 @@ namespace DLS.Simulation
 			{
 				ReplayKeyLookup.Clear();
 				ReplayOverrideActive = false;
+				Publish();
 			}
 		}
 	}

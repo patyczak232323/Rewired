@@ -1,0 +1,7 @@
+# One-bit half adder.
+chip HalfAdder
+    in A, B
+    out SUM, CARRY
+
+    SUM = A xor B
+    CARRY = A and B

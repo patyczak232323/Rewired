@@ -133,14 +133,18 @@ namespace DLS.RHDL
 			// the other in one column, with the feedback wires crossing between them.
 			Dictionary<LayoutNode, LayoutNode> group = nodes.ToDictionary(n => n, n => n);
 			HashSet<(LayoutNode, LayoutNode)> links = new(edges.Select(e => (e.Source, e.Target)));
+			// How many other parts already joined each part's group: a part joins at most one
+			// group, and only while it still leads its own, so this replaces a scan of all parts.
+			Dictionary<LayoutNode, int> joined = new();
 			foreach (LayoutEdge edge in edges)
 			{
 				LayoutNode a = edge.Source;
 				LayoutNode b = edge.Target;
 				if (a == b || a.IsInputPort || b.IsOutputPort || group[a] != a || group[b] != b) continue;
 				if (a.Height > 1f || b.Height > 1f || !links.Contains((b, a))) continue;
-				if (nodes.Any(n => n != a && group[n] == a) || nodes.Any(n => n != b && group[n] == b)) continue;
+				if (joined.ContainsKey(a) || joined.ContainsKey(b)) continue;
 				group[b] = a;
+				joined[a] = joined.TryGetValue(a, out int count) ? count + 1 : 1;
 			}
 
 			foreach (LayoutEdge edge in edges)
@@ -234,11 +238,17 @@ namespace DLS.RHDL
 			}
 
 			// Parts without inputs (constants, clocks) sit just before their first reader.
+			HashSet<LayoutNode> driven = new();
+			foreach (LayoutEdge edge in edges)
+			{
+				if (group[edge.Source] != group[edge.Target]) driven.Add(group[edge.Target]);
+			}
+
 			for (int i = topological.Count - 1; i >= 0; i--)
 			{
 				LayoutNode node = topological[i];
 				if (node.IsInputPort) continue;
-				bool hasPredecessor = edges.Any(e => group[e.Target] == node && group[e.Source] != node);
+				bool hasPredecessor = driven.Contains(node);
 				if (hasPredecessor || successors[node].Count == 0) continue;
 				int earliestReader = successors[node].Min(s => s.Layer);
 				node.Layer = Math.Max(1, earliestReader - 1);
@@ -355,7 +365,8 @@ namespace DLS.RHDL
 						trunks[key] = trunk = new NetTrunk { Channel = hop.Channel };
 					}
 
-					if (!trunk.Hops.Contains(hop)) trunk.Hops.Add(hop);
+					// Every hop is new and listed once, so it is never in the trunk yet.
+					trunk.Hops.Add(hop);
 					hop.Trunk = trunk;
 					edge.Route.Add(hop);
 
@@ -481,17 +492,40 @@ namespace DLS.RHDL
 					}
 				}
 
+				// Sorted by left end (then right end), two wires cross exactly when a later one
+				// ends lower on the right: wires that share a left end are sorted by their right
+				// end, so they can never count. That is the number of inversions of the right ends.
 				segments.Sort();
-				for (int a = 0; a < segments.Count; a++)
-				{
-					for (int b = a + 1; b < segments.Count; b++)
-					{
-						if (segments[b].a > segments[a].a && segments[b].b < segments[a].b) crossings++;
-					}
-				}
+				float[] rightEnds = new float[segments.Count];
+				for (int a = 0; a < segments.Count; a++) rightEnds[a] = segments[a].b;
+				crossings += CountInversions(rightEnds, new float[rightEnds.Length], 0, rightEnds.Length);
 			}
 
 			return crossings;
+		}
+
+		// Pairs i < j with values[j] < values[i], by merge sort; sorts the range as it goes.
+		static long CountInversions(float[] values, float[] scratch, int start, int end)
+		{
+			if (end - start < 2) return 0;
+			int middle = (start + end) / 2;
+			long count = CountInversions(values, scratch, start, middle) + CountInversions(values, scratch, middle, end);
+
+			int left = start, right = middle, outIndex = start;
+			while (left < middle && right < end)
+			{
+				if (values[right] < values[left])
+				{
+					count += middle - left;
+					scratch[outIndex++] = values[right++];
+				}
+				else scratch[outIndex++] = values[left++];
+			}
+
+			while (left < middle) scratch[outIndex++] = values[left++];
+			while (right < end) scratch[outIndex++] = values[right++];
+			Array.Copy(scratch, start, values, start, end - start);
+			return count;
 		}
 
 		// ---- 4. Vertical positions ----
@@ -695,18 +729,54 @@ namespace DLS.RHDL
 				// the left of any wire that enters the right side at the same height, or the
 				// two horizontals would overlap.
 				Dictionary<NetTrunk, List<NetTrunk>> mustBeLeftOf = needing.ToDictionary(t => t, _ => new List<NetTrunk>());
+				Dictionary<NetTrunk, List<NetTrunk>> mustBeRightOf = needing.ToDictionary(t => t, _ => new List<NetTrunk>());
 				Dictionary<NetTrunk, int> before = needing.ToDictionary(t => t, _ => 0);
-				foreach (NetTrunk p in needing)
+
+				// Every right-side height, filed under 0.001-wide buckets: two heights closer
+				// than 0.001 are in the same or a neighbouring bucket, so only those are compared.
+				Dictionary<long, List<(int trunk, float y)>> rightByBucket = new();
+				for (int qi = 0; qi < needing.Count; qi++)
 				{
-					foreach (NetTrunk q in needing)
+					foreach (float r in needing[qi].RightYs)
 					{
-						if (p == q) continue;
-						if (p.LeftYs.Any(y => q.RightYs.Any(r => Math.Abs(r - y) < 0.001f)))
+						long bucket = HeightBucket(r);
+						if (!rightByBucket.TryGetValue(bucket, out List<(int, float)> entries)) rightByBucket[bucket] = entries = new List<(int, float)>();
+						entries.Add((qi, r));
+					}
+				}
+
+				List<int> matches = new();
+				bool[] matched = new bool[needing.Count];
+				for (int pi = 0; pi < needing.Count; pi++)
+				{
+					NetTrunk p = needing[pi];
+					foreach (float y in p.LeftYs)
+					{
+						long bucket = HeightBucket(y);
+						for (long b = bucket - 2; b <= bucket + 2; b++)
 						{
-							mustBeLeftOf[p].Add(q);
-							before[q]++;
+							if (!rightByBucket.TryGetValue(b, out List<(int trunk, float y)> entries)) continue;
+							foreach ((int qi, float r) in entries)
+							{
+								if (qi == pi || matched[qi] || !(Math.Abs(r - y) < 0.001f)) continue;
+								matched[qi] = true;
+								matches.Add(qi);
+							}
 						}
 					}
+
+					// Same order as checking every other trunk in turn.
+					matches.Sort();
+					foreach (int qi in matches)
+					{
+						NetTrunk q = needing[qi];
+						mustBeLeftOf[p].Add(q);
+						mustBeRightOf[q].Add(p);
+						before[q]++;
+						matched[qi] = false;
+					}
+
+					matches.Clear();
 				}
 
 				// Topological order (constraints first), wider spans first within a rank.
@@ -736,9 +806,9 @@ namespace DLS.RHDL
 				foreach (NetTrunk trunk in order)
 				{
 					int minimum = 0;
-					foreach (NetTrunk p in needing)
+					foreach (NetTrunk p in mustBeRightOf[trunk])
 					{
-						if (p.Track >= 0 && mustBeLeftOf[p].Contains(trunk)) minimum = Math.Max(minimum, p.Track + 1);
+						if (p.Track >= 0) minimum = Math.Max(minimum, p.Track + 1);
 					}
 
 					int track = minimum;
@@ -753,6 +823,8 @@ namespace DLS.RHDL
 
 			return widths;
 		}
+
+		static long HeightBucket(float y) => (long)Math.Floor(y / 0.001);
 
 		static bool Overlaps(NetTrunk a, NetTrunk b) =>
 			a.Bottom - TrackSpacing / 2 < b.Top && b.Bottom - TrackSpacing / 2 < a.Top;

@@ -1,0 +1,6 @@
+# NOT: one NAND with both inputs tied together.
+chip Not
+    in A
+    out Y
+
+    Y = NAND(A, A)

@@ -40,7 +40,17 @@ namespace DLS.Simulation
 		static readonly object programCacheLock = new();
 		static ConditionalWeakTable<ChipDescription, ProgramHolder> programs = new();
 
+		// False where the platform cannot generate code at run time and programs are interpreted
+		// instead: known up front for IL2CPP builds (Android, WebGL), otherwise found out when
+		// creating a DynamicMethod fails.
+#if ENABLE_IL2CPP && !UNITY_EDITOR
+		public static bool DynamicCodeAvailable { get; private set; } = false;
+#else
 		public static bool DynamicCodeAvailable { get; private set; } = true;
+#endif
+		// Run programs through the interpreter even where code can be generated (tests).
+		internal static bool ForceInterpreter;
+		public static bool Interpreting => ForceInterpreter || !DynamicCodeAvailable;
 		public static string LastFailureReason { get; private set; } = string.Empty;
 
 		internal static void NotifyDescriptionsChanged()
@@ -56,8 +66,7 @@ namespace DLS.Simulation
 			if (simChip == null) return;
 			simChip.FeedbackExecutor = null;
 
-			if (!DynamicCodeAvailable ||
-			    simChip.CompiledExecutor != null ||
+			if (simChip.CompiledExecutor != null ||
 			    description == null ||
 			    library == null ||
 			    description.ChipType != ChipType.Custom ||
@@ -71,6 +80,20 @@ namespace DLS.Simulation
 
 			CompiledFeedbackExecutor executor = program.CreateExecutor(simChip);
 			if (executor != null) simChip.FeedbackExecutor = executor;
+		}
+
+		// Compiles a private program for one chip, outside the program cache. Null when the chip
+		// is not supported. Used by the tests that compare native and interpreted programs.
+		internal static CompiledFeedbackProgram TryCompileStandalone(SimChip root, string chipName)
+		{
+			try
+			{
+				return CompileProgram(root, chipName);
+			}
+			catch (Exception)
+			{
+				return null;
+			}
 		}
 
 		static CompiledFeedbackProgram GetOrCompileProgram(SimChip representative, ChipDescription description)
@@ -87,18 +110,6 @@ namespace DLS.Simulation
 			try
 			{
 				program = CompileProgram(representative, description.Name);
-			}
-			catch (PlatformNotSupportedException e)
-			{
-				DynamicCodeAvailable = false;
-				LastFailureReason = e.Message;
-				return null;
-			}
-			catch (NotSupportedException e)
-			{
-				DynamicCodeAvailable = false;
-				LastFailureReason = e.Message;
-				return null;
 			}
 			catch (Exception e)
 			{
@@ -199,12 +210,34 @@ namespace DLS.Simulation
 			for (int i = 0; i < root.OutputPins.Length; i++) rootOutputs[i] = resolver.Resolve(root.OutputPins[i]);
 
 			List<NativeFeedbackBlock> blocks = new();
-			for (int start = 0; start < nodes.Length; start += NodesPerNativeMethod)
+			GateProgram interpreted = null;
+			if (!Interpreting)
 			{
-				int count = Math.Min(NodesPerNativeMethod, nodes.Length - start);
-				NativeFeedbackBlock block = EmitNativeBlock(nodes, start, count, chipName, blocks.Count);
-				if (block == null) return null;
-				blocks.Add(block);
+				try
+				{
+					for (int start = 0; start < nodes.Length; start += NodesPerNativeMethod)
+					{
+						int count = Math.Min(NodesPerNativeMethod, nodes.Length - start);
+						NativeFeedbackBlock block = EmitNativeBlock(nodes, start, count, chipName, blocks.Count);
+						if (block == null) return null;
+						blocks.Add(block);
+					}
+				}
+				catch (Exception e) when (IsCodeGenerationUnavailable(e))
+				{
+					DynamicCodeAvailable = false;
+					blocks.Clear();
+				}
+			}
+
+			if (Interpreting)
+			{
+				// Without generated code the whole program is one interpreted program, which
+				// the executor settles by evaluating only what changes (GateProgram.Settle).
+				GateProgram.Builder builder = new();
+				for (int i = 0; i < nodes.Length; i++) AddNode(builder, nodes[i]);
+				interpreted = builder.Build();
+				blocks.Add(interpreted.Run);
 			}
 
 			int[] outputSlots = new int[rootOutputs.Length];
@@ -218,6 +251,7 @@ namespace DLS.Simulation
 			timer.Stop();
 			return new CompiledFeedbackProgram(
 				blocks.ToArray(),
+				interpreted,
 				nextScratchSlot,
 				root.InputPins.Length,
 				root.OutputPins.Length,
@@ -332,6 +366,80 @@ namespace DLS.Simulation
 				ChipType.BusTerminus_4Bit or
 				ChipType.BusTerminus_8Bit;
 		}
+
+		// The interpreted form of EmitNode: the same operations, see GateProgram.
+		static void AddNode(GateProgram.Builder program, CompiledNode node)
+		{
+			switch (node.Type)
+			{
+				case ChipType.Nand:
+					program.Nand(node.Outputs[0].Slot, Operand(node.Inputs[0]), Operand(node.Inputs[1]));
+					break;
+
+				case ChipType.TriStateBuffer:
+					program.TriState(node.Outputs[0].Slot, Operand(node.Inputs[0]), Operand(node.Inputs[1]));
+					break;
+
+				case ChipType.Split_4To1Bit:
+					AddSplitBits(program, node, new[] { 3, 2, 1, 0 });
+					break;
+
+				case ChipType.Split_8To1Bit:
+					AddSplitBits(program, node, new[] { 7, 6, 5, 4, 3, 2, 1, 0 });
+					break;
+
+				case ChipType.Merge_1To4Bit:
+					AddMergeSingleBits(program, node, new[] { 3, 2, 1, 0 });
+					break;
+
+				case ChipType.Merge_1To8Bit:
+					AddMergeSingleBits(program, node, new[] { 7, 6, 5, 4, 3, 2, 1, 0 });
+					break;
+
+				case ChipType.Merge_4To8Bit:
+					program.Merge4To8(node.Outputs[0].Slot, Operand(node.Inputs[0]), Operand(node.Inputs[1]));
+					break;
+
+				case ChipType.Split_8To4Bit:
+					program.Nibble(node.Outputs[0].Slot, Operand(node.Inputs[0]), 4);
+					program.Nibble(node.Outputs[1].Slot, Operand(node.Inputs[0]), 0);
+					break;
+
+				case ChipType.Bus_1Bit:
+				case ChipType.Bus_4Bit:
+				case ChipType.Bus_8Bit:
+					program.Copy(node.Outputs[0].Slot, Operand(node.Inputs[0]));
+					break;
+
+				case ChipType.BusTerminus_1Bit:
+				case ChipType.BusTerminus_4Bit:
+				case ChipType.BusTerminus_8Bit:
+					break;
+
+				default:
+					throw new NotSupportedException("Unsupported primitive: " + node.Type);
+			}
+		}
+
+		static void AddSplitBits(GateProgram.Builder program, CompiledNode node, int[] shifts)
+		{
+			for (int i = 0; i < shifts.Length; i++) program.ShiftMask(node.Outputs[i].Slot, Operand(node.Inputs[0]), shifts[i]);
+		}
+
+		static void AddMergeSingleBits(GateProgram.Builder program, CompiledNode node, int[] inputIndices)
+		{
+			GateProgram.Operand[] inputs = new GateProgram.Operand[inputIndices.Length];
+			for (int bit = 0; bit < inputIndices.Length; bit++) inputs[bit] = Operand(node.Inputs[inputIndices[bit]]);
+			program.MergeBits(node.Outputs[0].Slot, inputs);
+		}
+
+		static GateProgram.Operand Operand(SignalRef signal) =>
+			signal.IsConstant ? GateProgram.Operand.FromConstant(signal.Constant) : GateProgram.Operand.FromSlot(signal.Slot);
+
+		// True for the errors a platform without run-time code generation (IL2CPP) gives when
+		// asked to create a DynamicMethod.
+		static bool IsCodeGenerationUnavailable(Exception e) =>
+			e is NotSupportedException or MissingMethodException or TypeLoadException or MemberAccessException;
 
 		static NativeFeedbackBlock EmitNativeBlock(
 			CompiledNode[] nodes,
@@ -676,8 +784,12 @@ namespace DLS.Simulation
 		public readonly int PrimitiveOutputCount;
 		public readonly double CompileMilliseconds;
 
+		// Set when the program runs on the interpreter instead of generated code.
+		public readonly GateProgram Interpreted;
+
 		public CompiledFeedbackProgram(
 			FeedbackJitCompiler.NativeFeedbackBlock[] blocks,
+			GateProgram interpreted,
 			int scratchCount,
 			int inputCount,
 			int outputCount,
@@ -688,6 +800,7 @@ namespace DLS.Simulation
 			double compileMilliseconds)
 		{
 			this.blocks = blocks;
+			Interpreted = interpreted;
 			this.outputSlots = outputSlots;
 			this.outputConstants = outputConstants;
 			ScratchCount = scratchCount;
@@ -763,6 +876,10 @@ namespace DLS.Simulation
 		readonly uint[] lastStableInputs;
 		bool hasStableInputSnapshot;
 		bool disabled;
+		// Interpreted programs only: the bookkeeping of GateProgram.Settle, and whether current
+		// is a settled state that Settle may start from (else every operation is evaluated once).
+		readonly GateProgram.SettleState settleState;
+		bool settled;
 
 		public bool Ready { get; private set; }
 		public bool Disabled => disabled;
@@ -779,6 +896,7 @@ namespace DLS.Simulation
 			next = new uint[program.ScratchCount];
 			outputs = new uint[program.OutputCount];
 			lastStableInputs = new uint[program.InputCount];
+			if (program.Interpreted != null) settleState = new GateProgram.SettleState(program.Interpreted);
 		}
 
 		public void SynchronizeFromChipTree()
@@ -794,6 +912,7 @@ namespace DLS.Simulation
 			}
 
 			hasStableInputSnapshot = false;
+			settled = false;
 			Ready = true;
 		}
 
@@ -849,17 +968,36 @@ namespace DLS.Simulation
 				if (unchanged) return true;
 			}
 
-			for (int i = 0; i < inputCount; i++)
-			{
-				uint state = chip.InputPins[i].State;
-				current[i] = state;
-				next[i] = state;
-			}
-
 			int maxSweeps = Math.Max(256, program.PrimitiveNodeCount + 64);
 			bool converged = false;
 
-			for (int sweep = 0; sweep < maxSweeps; sweep++)
+			GateProgram interpreted = program.Interpreted;
+			if (interpreted != null)
+			{
+				// Same result as the sweeps below; see GateProgram.Settle.
+				if (!settled) interpreted.MarkAll(settleState);
+				for (int i = 0; i < inputCount; i++)
+				{
+					uint state = chip.InputPins[i].State;
+					if (current[i] != state) interpreted.MarkReaders(settleState, i);
+					current[i] = state;
+				}
+
+				// Settle works in current alone; next is only used by the full-sweep loop.
+				sweepCount = interpreted.Settle(current, settleState, maxSweeps, out converged);
+				settled = converged;
+			}
+			else
+			{
+				for (int i = 0; i < inputCount; i++)
+				{
+					uint state = chip.InputPins[i].State;
+					current[i] = state;
+					next[i] = state;
+				}
+			}
+
+			for (int sweep = 0; interpreted == null && sweep < maxSweeps; sweep++)
 			{
 				for (int i = 0; i < inputCount; i++) next[i] = current[i];
 				program.RunSweep(current, next);

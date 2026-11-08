@@ -39,7 +39,17 @@ namespace DLS.Simulation
 		static readonly object programCacheLock = new();
 		static ConditionalWeakTable<ChipDescription, ProgramHolder> programs = new();
 
+		// False where the platform cannot generate code at run time and programs are interpreted
+		// instead: known up front for IL2CPP builds (Android, WebGL), otherwise found out when
+		// creating a DynamicMethod fails.
+#if ENABLE_IL2CPP && !UNITY_EDITOR
+		public static bool DynamicCodeAvailable { get; private set; } = false;
+#else
 		public static bool DynamicCodeAvailable { get; private set; } = true;
+#endif
+		// Run programs through the interpreter even where code can be generated (tests).
+		internal static bool ForceInterpreter;
+		public static bool Interpreting => ForceInterpreter || !DynamicCodeAvailable;
 		public static string LastFailureReason { get; private set; } = string.Empty;
 
 		internal static void NotifyDescriptionsChanged()
@@ -55,8 +65,7 @@ namespace DLS.Simulation
 			if (simChip == null) return;
 			simChip.CompiledExecutor = null;
 
-			if (!DynamicCodeAvailable ||
-			    description == null ||
+			if (description == null ||
 			    library == null ||
 			    description.ChipType != ChipType.Custom)
 			{
@@ -80,8 +89,6 @@ namespace DLS.Simulation
 		// Null when the chip or platform is not supported; callers then evaluate the gates.
 		internal static CompiledCombinationalProgram TryCompileStandalone(SimChip root, string chipName)
 		{
-			if (!DynamicCodeAvailable) return null;
-
 			try
 			{
 				return CompileProgram(root, chipName);
@@ -106,18 +113,6 @@ namespace DLS.Simulation
 			try
 			{
 				program = CompileProgram(representative, description.Name);
-			}
-			catch (PlatformNotSupportedException e)
-			{
-				DynamicCodeAvailable = false;
-				LastFailureReason = e.Message;
-				return null;
-			}
-			catch (NotSupportedException e)
-			{
-				DynamicCodeAvailable = false;
-				LastFailureReason = e.Message;
-				return null;
 			}
 			catch (Exception e)
 			{
@@ -222,12 +217,12 @@ namespace DLS.Simulation
 			for (int start = 0; start < topologicalOrder.Length; start += NodesPerNativeMethod)
 			{
 				int count = Math.Min(NodesPerNativeMethod, topologicalOrder.Length - start);
-				NativeBlock block = EmitNativeBlock(nodes, topologicalOrder, start, count, chipName, blocks.Count);
+				NativeBlock block = CreateBlock(nodes, topologicalOrder, start, count, chipName, blocks.Count);
 				if (block == null) return null;
 				blocks.Add(block);
 			}
 
-			NativeOutputWriter outputWriter = EmitOutputWriter(rootOutputs, chipName);
+			NativeOutputWriter outputWriter = CreateOutputWriter(rootOutputs, chipName);
 			if (outputWriter == null) return null;
 
 			timer.Stop();
@@ -346,6 +341,130 @@ namespace DLS.Simulation
 				ChipType.BusTerminus_4Bit or
 				ChipType.BusTerminus_8Bit;
 		}
+
+		// Native code where the platform can generate it, the interpreter everywhere else.
+		static NativeBlock CreateBlock(CompiledNode[] nodes, int[] order, int start, int count, string chipName, int blockIndex)
+		{
+			if (!Interpreting)
+			{
+				try
+				{
+					return EmitNativeBlock(nodes, order, start, count, chipName, blockIndex);
+				}
+				catch (Exception e) when (IsCodeGenerationUnavailable(e))
+				{
+					DynamicCodeAvailable = false;
+				}
+			}
+
+			// One array is both read and written, in topological order, like the IL.
+			GateProgram.Builder builder = new();
+			for (int i = 0; i < count; i++) AddNode(builder, nodes[order[start + i]]);
+			GateProgram program = builder.Build();
+			return scratch => program.Run(scratch, scratch);
+		}
+
+		static NativeOutputWriter CreateOutputWriter(SignalRef[] outputs, string chipName)
+		{
+			if (!Interpreting)
+			{
+				try
+				{
+					return EmitOutputWriter(outputs, chipName);
+				}
+				catch (Exception e) when (IsCodeGenerationUnavailable(e))
+				{
+					DynamicCodeAvailable = false;
+				}
+			}
+
+			int[] slots = new int[outputs.Length];
+			uint[] constants = new uint[outputs.Length];
+			for (int i = 0; i < outputs.Length; i++)
+			{
+				slots[i] = outputs[i].IsConstant ? -1 : outputs[i].Slot;
+				constants[i] = outputs[i].Constant;
+			}
+
+			return (scratch, results) =>
+			{
+				for (int i = 0; i < slots.Length; i++) results[i] = slots[i] >= 0 ? scratch[slots[i]] : constants[i];
+			};
+		}
+
+		// The interpreted form of EmitNode: the same operations, see GateProgram.
+		static void AddNode(GateProgram.Builder program, CompiledNode node)
+		{
+			switch (node.Type)
+			{
+				case ChipType.Nand:
+					program.Nand(node.Outputs[0].Slot, Operand(node.Inputs[0]), Operand(node.Inputs[1]));
+					break;
+
+				case ChipType.TriStateBuffer:
+					program.TriState(node.Outputs[0].Slot, Operand(node.Inputs[0]), Operand(node.Inputs[1]));
+					break;
+
+				case ChipType.Split_4To1Bit:
+					AddSplitBits(program, node, new[] { 3, 2, 1, 0 });
+					break;
+
+				case ChipType.Split_8To1Bit:
+					AddSplitBits(program, node, new[] { 7, 6, 5, 4, 3, 2, 1, 0 });
+					break;
+
+				case ChipType.Merge_1To4Bit:
+					AddMergeSingleBits(program, node, new[] { 3, 2, 1, 0 });
+					break;
+
+				case ChipType.Merge_1To8Bit:
+					AddMergeSingleBits(program, node, new[] { 7, 6, 5, 4, 3, 2, 1, 0 });
+					break;
+
+				case ChipType.Merge_4To8Bit:
+					program.Merge4To8(node.Outputs[0].Slot, Operand(node.Inputs[0]), Operand(node.Inputs[1]));
+					break;
+
+				case ChipType.Split_8To4Bit:
+					program.Nibble(node.Outputs[0].Slot, Operand(node.Inputs[0]), 4);
+					program.Nibble(node.Outputs[1].Slot, Operand(node.Inputs[0]), 0);
+					break;
+
+				case ChipType.Bus_1Bit:
+				case ChipType.Bus_4Bit:
+				case ChipType.Bus_8Bit:
+					program.Copy(node.Outputs[0].Slot, Operand(node.Inputs[0]));
+					break;
+
+				case ChipType.BusTerminus_1Bit:
+				case ChipType.BusTerminus_4Bit:
+				case ChipType.BusTerminus_8Bit:
+					break;
+
+				default:
+					throw new NotSupportedException("Unsupported primitive: " + node.Type);
+			}
+		}
+
+		static void AddSplitBits(GateProgram.Builder program, CompiledNode node, int[] shifts)
+		{
+			for (int i = 0; i < shifts.Length; i++) program.ShiftMask(node.Outputs[i].Slot, Operand(node.Inputs[0]), shifts[i]);
+		}
+
+		static void AddMergeSingleBits(GateProgram.Builder program, CompiledNode node, int[] inputIndices)
+		{
+			GateProgram.Operand[] inputs = new GateProgram.Operand[inputIndices.Length];
+			for (int bit = 0; bit < inputIndices.Length; bit++) inputs[bit] = Operand(node.Inputs[inputIndices[bit]]);
+			program.MergeBits(node.Outputs[0].Slot, inputs);
+		}
+
+		static GateProgram.Operand Operand(SignalRef signal) =>
+			signal.IsConstant ? GateProgram.Operand.FromConstant(signal.Constant) : GateProgram.Operand.FromSlot(signal.Slot);
+
+		// True for the errors a platform without run-time code generation (IL2CPP) gives when
+		// asked to create a DynamicMethod.
+		static bool IsCodeGenerationUnavailable(Exception e) =>
+			e is NotSupportedException or MissingMethodException or TypeLoadException or MemberAccessException;
 
 		static NativeBlock EmitNativeBlock(
 			CompiledNode[] nodes,

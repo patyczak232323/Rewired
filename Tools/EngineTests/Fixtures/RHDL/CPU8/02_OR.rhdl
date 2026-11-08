@@ -1,0 +1,6 @@
+# OR gate: NAND of the inverted inputs (De Morgan).
+chip Or
+    in A, B
+    out Y
+
+    Y = NAND(Not(A), Not(B))

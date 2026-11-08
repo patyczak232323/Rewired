@@ -1,0 +1,10 @@
+# 8-bit ripple-carry adder: eight full adders, the carry runs from bit 0 up.
+chip Add8
+    in A: 8, B: 8, CIN
+    out S: 8, COUT
+
+    carry = CIN
+    for i in 0..7
+        S[i], carry = FullAdder(A[i], B[i], carry)
+    end
+    COUT = carry

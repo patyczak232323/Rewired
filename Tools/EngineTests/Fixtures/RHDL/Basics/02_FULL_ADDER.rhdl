@@ -1,0 +1,8 @@
+# One-bit full adder.
+chip FullAdder
+    in A, B, CIN
+    out SUM, COUT
+
+    ab = A xor B
+    SUM = ab xor CIN
+    COUT = A and B or CIN and ab
