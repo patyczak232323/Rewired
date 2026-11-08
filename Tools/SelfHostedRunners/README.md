@@ -34,16 +34,14 @@ Re-running `install` is safe: registered runners are kept and only missing ones 
 runs-on: [self-hosted, trusted]
 ```
 
-Use them for workflows triggered by `push`, tags or `workflow_dispatch`, and for
-`pull_request` workflows only when pull requests from forks are skipped (see
-`unity-tests.yml`): a fork's code would otherwise run on this host.
+Only use them for workflows triggered by `push`, tags or `workflow_dispatch`. If you ever
+add a `pull_request` workflow, skip pull requests from forks, otherwise a stranger's code
+runs on this machine.
 
-Current users (all need `RUNNER_DOCKER=1`):
+Used by (needs `RUNNER_DOCKER=1`):
 
 - `release.yml` and `unofficial-build.yml`: the Unity build jobs. Publishing stays on
   GitHub-hosted runners, which also turn the uploaded `.tar` builds into release zips.
-- `unity-tests.yml`: every run, including pull requests from branches of this repository.
-  Pull requests from forks are skipped.
 
 Unity runs in Docker as root and writes into both the checkout and the action's own
 folder under `_work/_actions`. These jobs therefore hand the runner's whole `_work`
