@@ -13,13 +13,15 @@ Windows · Linux · Android · MIT
 <a href="LICENSE"><img src="https://img.shields.io/github/license/patyczak232323/Rewired" alt="License"></a>
 </p>
 
+<p align="center"><a href="https://patyczak232323.github.io/Rewired/">Website</a> · <a href="https://patyczak232323.github.io/Rewired/play/">Play in the browser</a> · <a href="https://patyczak232323.github.io/Rewired/pl/">Po polsku</a></p>
+
 <p align="center"><img src="Docs/images/snake-pix6.png" alt="Rewired with the Snake project open" width="900"></p>
 
 Rewired is a fork of Sebastian Lague's [Digital Logic Sim](https://github.com/SebLague/Digital-Logic-Sim). The editor and the project format are still mostly his. The simulator underneath is new: it gives the same result every time and stays fast on big circuits like CPUs. On top of that there's a small hardware description language, a colour screen and an Android version.
 
 ## Download
 
-Grab the latest build from [Releases](https://github.com/patyczak232323/Rewired/releases/latest):
+**[Try it in your browser](https://patyczak232323.github.io/Rewired/play/)**, nothing to install. Or grab the latest build from [Releases](https://github.com/patyczak232323/Rewired/releases/latest):
 
 - Windows: `DLSRewired-Windows-x64.zip`
 - Linux: `DLSRewired-Linux-x86_64.zip`
@@ -104,6 +106,7 @@ Then open the folder in Unity Hub.
 Release builds run on GitHub Actions on self-hosted runners (`Tools/SelfHostedRunners` has the setup script). The workflows need `UNITY_LICENSE`, `UNITY_EMAIL`, `UNITY_PASSWORD`, and for Android `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASS`, `ANDROID_KEYALIAS_NAME`, `ANDROID_KEYALIAS_PASS`.
 
 - Every push to `main` updates the `android-unofficial` pre-release with fresh builds (`unofficial-build.yml`).
+- `pages.yml` publishes the website in `site/` to GitHub Pages, with the browser build from the latest release under `play/`. It runs after every release and when `site/` changes.
 - For a release: bump the version in `VERSION`, `Main.RewiredVersion` and `bundleVersion` in `ProjectSettings/ProjectSettings.asset`, merge to `main` and run `release.yml` (or push a `v*` tag matching `VERSION`).
 
 Current version: 0.7.0.

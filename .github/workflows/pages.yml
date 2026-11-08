@@ -1,0 +1,104 @@
+name: Website
+
+# Publishes site/ to GitHub Pages, with the browser build from the latest release under
+# play/. Nothing is built with Unity here: the WebGL zip attached to the release is used.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "site/**"
+      - "Docs/logo.png"
+      - "Docs/images/**"
+      - ".github/workflows/pages.yml"
+  # A new release brings a new browser build. Releases made by the release workflow do not
+  # trigger other workflows through the release event, so follow the workflow run instead.
+  workflow_run:
+    workflows: ["Build and Release"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Assemble the site
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Assemble site with the latest browser build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # The latest full release (pre-releases such as android-unofficial are skipped).
+          tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          echo "Latest release: $tag"
+
+          mkdir -p _site/images
+          cp -R site/. _site/
+          cp Docs/logo.png Docs/images/*.png _site/images/
+
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+            --pattern DLSRewired-WebGL.zip --dir webgl
+          unzip -q webgl/DLSRewired-WebGL.zip -d webgl/unpacked
+
+          # The zip holds DLSRewired/Build/... ; play/index.html loads these exact names.
+          loader="$(find webgl/unpacked -type f -name 'DLSRewired.loader.js' -print -quit)"
+          if [ -z "$loader" ]; then
+            echo "::error::DLSRewired.loader.js not found in the WebGL zip of $tag"
+            find webgl/unpacked -type f -print
+            exit 1
+          fi
+          build_dir="$(dirname "$loader")"
+          for file in DLSRewired.data.unityweb DLSRewired.framework.js.unityweb DLSRewired.wasm.unityweb; do
+            if [ ! -f "$build_dir/$file" ]; then
+              echo "::error::$file not found in the WebGL zip of $tag. Update site/play/index.html to the new file names."
+              ls -la "$build_dir"
+              exit 1
+            fi
+          done
+          cp -R "$build_dir" _site/play/Build
+
+          version="${tag#v}"
+          find _site -name '*.html' -exec sed -i "s/__VERSION__/$version/g" {} +
+
+          # GitHub Pages would otherwise run Jekyll over the files.
+          touch _site/.nojekyll
+          find _site -type f | sort
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Publish to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

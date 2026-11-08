@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rewired: digital logic simulator. Build a CPU from NAND gates</title>
+<meta name="description" content="Free digital logic simulator for Windows, Linux, Android and the browser. Build logic gates, adders, RAM and a whole CPU out of NAND gates, then play Snake on it.">
+<link rel="canonical" href="https://patyczak232323.github.io/Rewired/">
+<link rel="alternate" hreflang="en" href="https://patyczak232323.github.io/Rewired/">
+<link rel="alternate" hreflang="pl" href="https://patyczak232323.github.io/Rewired/pl/">
+<link rel="alternate" hreflang="x-default" href="https://patyczak232323.github.io/Rewired/">
+<link rel="icon" type="image/png" href="images/logo.png">
+<link rel="stylesheet" href="style.css">
+<meta name="theme-color" content="#1b1a1c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Rewired">
+<meta property="og:title" content="Rewired: build a CPU from NAND gates">
+<meta property="og:description" content="Free digital logic simulator. Build gates, RAM and a whole CPU, then play Snake on it. Windows, Linux, Android and the browser.">
+<meta property="og:url" content="https://patyczak232323.github.io/Rewired/">
+<meta property="og:image" content="https://patyczak232323.github.io/Rewired/images/snake-pix6.png">
+<meta property="og:image:width" content="1600">
+<meta property="og:image:height" content="900">
+<meta property="og:locale" content="en_GB">
+<meta property="og:locale:alternate" content="pl_PL">
+<meta name="twitter:card" content="summary_large_image">
+<script>
+	// Send Polish-speaking visitors to the Polish page once. A language picked with the
+	// switch at the top is remembered and always wins. Without storage nobody is redirected,
+	// so a visitor can never get stuck going back and forth.
+	(function () {
+		try {
+			var chosen = localStorage.getItem("rewired-lang");
+			if (chosen === "en") return;
+			var first = ((navigator.languages && navigator.languages[0]) || navigator.language || "").toLowerCase();
+			if (chosen === "pl" || (!chosen && first.indexOf("pl") === 0)) location.replace("pl/" + location.hash);
+		} catch (e) { }
+	})();
+</script>
+<script type="application/ld+json">
+{
+	"@context": "https://schema.org",
+	"@type": "SoftwareApplication",
+	"name": "Rewired",
+	"description": "Free digital logic simulator. Build logic gates, adders, RAM and a whole CPU out of NAND gates.",
+	"applicationCategory": "EducationalApplication",
+	"operatingSystem": "Windows, Linux, Android, web browser",
+	"softwareVersion": "__VERSION__",
+	"url": "https://patyczak232323.github.io/Rewired/",
+	"downloadUrl": "https://github.com/patyczak232323/Rewired/releases/latest",
+	"image": "https://patyczak232323.github.io/Rewired/images/snake-pix6.png",
+	"license": "https://opensource.org/licenses/MIT",
+	"isAccessibleForFree": true,
+	"offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+</head>
+<body>
+
+<div class="wrap">
+	<header class="top">
+		<a class="brand" href="./"><img src="images/logo.png" alt="" width="32" height="32">Rewired</a>
+		<nav>
+			<a href="#download">Download</a>
+			<a href="https://github.com/patyczak232323/Rewired">GitHub</a>
+			<span class="lang"><a href="./" aria-current="true" data-lang="en" lang="en">EN</a> | <a href="pl/" data-lang="pl" lang="pl">PL</a></span>
+		</nav>
+	</header>
+
+	<main>
+		<div class="hero">
+			<h1>Build a computer out of NAND gates</h1>
+			<p class="lead">Rewired is a free digital logic simulator. Start with a single gate, make your own chips, and keep going until you have registers, RAM and a working CPU. Then play Snake on it.</p>
+			<div class="buttons">
+				<a class="btn primary" href="play/">Play in your browser</a>
+				<a class="btn" href="#download">Download</a>
+				<a class="btn" href="https://github.com/patyczak232323/Rewired">Source code</a>
+			</div>
+			<p class="small">Version __VERSION__ · Windows, Linux, Android and the browser · MIT licence</p>
+
+			<figure class="shot">
+				<img src="images/snake-pix6.png" width="1600" height="900" alt="The Rewired editor with the Snake project open: parts on the left, the processor wired to a 64 by 64 screen in the middle, details on the right">
+			</figure>
+			<p class="small">The Snake project that comes with Rewired: a small processor made of logic gates, a 64×64 colour screen and four keys.</p>
+		</div>
+
+		<section>
+			<h2>What you can do with it</h2>
+			<div class="grid">
+				<div class="card">
+					<h3>Build from the bottom up</h3>
+					<p>Place gates, wire them together and pack the result into a chip of your own. Chips go inside other chips as deep as you like.</p>
+				</div>
+				<div class="card">
+					<h3>Same result every time</h3>
+					<p>The simulation is deterministic, so a circuit behaves the same on every run. That matters once you build latches, counters and CPUs. Big circuits stay fast.</p>
+				</div>
+				<div class="card">
+					<h3>Find out what went wrong</h3>
+					<p>Truth tables for combinational chips, breakpoints that stop when a pin changes, rises, falls or reaches a value, and waveforms.</p>
+				</div>
+				<div class="card">
+					<h3>Screen and keys</h3>
+					<p>A 64×64 colour screen and keyboard inputs. Enough for small games running on hardware you built yourself.</p>
+				</div>
+				<div class="card">
+					<h3>Export</h3>
+					<p>Save a chip as structural Verilog, an SVG schematic or a PNG picture.</p>
+				</div>
+				<div class="card">
+					<h3>Quick to use</h3>
+					<p><code>Ctrl+K</code> finds any part or command and <code>F1</code> lists every shortcut. On Android there's a touch interface made for fingers.</p>
+				</div>
+			</div>
+		</section>
+
+		<section>
+			<h2>Three computers to take apart</h2>
+			<p>Rewired installs three example projects the first time you start it. They're on the start screen, and every one of them is NAND gates all the way down.</p>
+			<ul class="plain">
+				<li><strong>Snake</strong>: the PIX6 processor drawing on the 64×64 screen. Open it and play with W, A, S and D.</li>
+				<li><strong>CPU8</strong>: an 8-bit single-cycle CPU with its own ROM and RAM.</li>
+				<li><strong>Core8</strong>: an 8-bit processor core.</li>
+			</ul>
+			<figure class="shot">
+				<img src="images/main-menu.png" width="1600" height="900" alt="The Rewired start screen with recent projects and the Snake, CPU8 and Core8 examples" loading="lazy">
+			</figure>
+		</section>
+
+		<section>
+			<h2>Describe a chip in words</h2>
+			<p>Wiring up a 16-bit adder by hand gets old fast. RHDL is a small language built into Rewired: you describe a chip in a few lines and RHDL Studio turns it into an ordinary circuit made of NAND gates and your other chips. You can open the result, look inside and change it, just like anything you built by hand.</p>
+<pre><code>chip FullAdder
+    in A, B, CIN
+    out SUM, COUT
+
+    ab = A xor B
+    SUM = ab xor CIN
+    COUT = (A and B) or (CIN and ab)</code></pre>
+			<ul class="plain">
+				<li><code>and</code>, <code>or</code>, <code>xor</code>, <code>not</code>, <code>nand</code>, <code>nor</code>, <code>xnor</code>, plus <code>+ -</code>, comparisons and shifts</li>
+				<li><code>if s then a else b</code> for multiplexers</li>
+				<li>single bits and ranges (<code>A[3]</code>, <code>A[0..3]</code>) and <code>join(...)</code> to build buses</li>
+				<li><code>for i in 0..7</code> loops for chains like ripple-carry adders</li>
+				<li>other chips called like functions: <code>q, nq = DffBit(d, clk)</code></li>
+				<li>feedback: a name can be used above the line that assigns it, which is how latches and registers are written</li>
+			</ul>
+			<div class="split">
+				<figure class="shot">
+					<img src="images/rhdl-studio.png" width="1600" height="735" alt="RHDL Studio with an 8-bit ALU written in RHDL" loading="lazy">
+					<figcaption>An 8-bit ALU in RHDL Studio…</figcaption>
+				</figure>
+				<figure class="shot">
+					<img src="images/rhdl-generated-alu.png" width="1600" height="850" alt="The same ALU built as a circuit of gates in the editor" loading="lazy">
+					<figcaption>…and the circuit it builds.</figcaption>
+				</figure>
+			</div>
+		</section>
+
+		<section id="download">
+			<h2>Download</h2>
+			<p>Rewired is free. Pick your system:</p>
+			<div class="downloads">
+				<a class="dl" href="https://github.com/patyczak232323/Rewired/releases/latest/download/DLSRewired-Windows-x64.zip">
+					<strong>Windows</strong>
+					<span>64-bit, zip. Unzip and run DLSRewired.exe.</span>
+				</a>
+				<a class="dl" href="https://github.com/patyczak232323/Rewired/releases/latest/download/DLSRewired-Linux-x86_64.zip">
+					<strong>Linux</strong>
+					<span>x86_64, zip. Unzip and run DLSRewired.</span>
+				</a>
+				<a class="dl" href="https://github.com/patyczak232323/Rewired/releases/latest/download/DLSRewired-Android-arm64.apk">
+					<strong>Android</strong>
+					<span>APK, still experimental.</span>
+				</a>
+				<a class="dl" href="play/">
+					<strong>Browser</strong>
+					<span>Nothing to install. Needs a keyboard and mouse.</span>
+				</a>
+			</div>
+			<ul class="plain small">
+				<li>Windows may warn that the app is from an unknown publisher, because it isn't code-signed. Click <em>More info</em>, then <em>Run anyway</em>.</li>
+				<li>On Linux the file may need to be made executable first: <code>chmod +x DLSRewired</code>.</li>
+				<li>On Android, allow installing apps from your browser or file manager, then open the APK.</li>
+				<li>The Windows, Linux and Android versions look for updates when they start and can install them for you. You can turn that off in Settings.</li>
+			</ul>
+			<p>Older versions and release notes are on <a href="https://github.com/patyczak232323/Rewired/releases">GitHub Releases</a>.</p>
+		</section>
+
+		<section>
+			<h2>In the browser</h2>
+			<p>The <a href="play/">browser version</a> is the same editor, about 10&nbsp;MB to load. Your projects are kept in the browser's storage on this computer, so clearing the site's data deletes them. For big circuits and for exporting files, the downloaded app is the better choice: it's faster and saves to normal folders.</p>
+		</section>
+
+		<section>
+			<h2>Where it comes from</h2>
+			<p>Rewired is a fork of <a href="https://github.com/SebLague/Digital-Logic-Sim">Digital Logic Sim</a> by Sebastian Lague. The editor and the project format are based on his work. The simulator underneath is new, and RHDL, the screen and the Android version were added on top.</p>
+			<p>Most Digital Logic Sim projects open in Rewired. Circuits that depended on the order gates happened to be evaluated in, or on races in feedback loops, can behave differently, because Rewired always gives one predictable answer.</p>
+			<p>Found a circuit that behaves wrong? <a href="https://github.com/patyczak232323/Rewired/issues">Open an issue</a> and attach the project.</p>
+		</section>
+	</main>
+
+	<footer>
+		<p>Rewired is open source under the <a href="https://github.com/patyczak232323/Rewired/blob/main/LICENSE">MIT licence</a>. Source code on <a href="https://github.com/patyczak232323/Rewired">GitHub</a>.</p>
+		<p>An independent project, not made by or affiliated with Sebastian Lague.</p>
+	</footer>
+</div>
+
+<script>
+	// Remember the language picked with the switch at the top.
+	document.querySelectorAll("[data-lang]").forEach(function (a) {
+		a.addEventListener("click", function () {
+			try { localStorage.setItem("rewired-lang", a.getAttribute("data-lang")); } catch (e) { }
+		});
+	});
+</script>
+</body>
+</html>

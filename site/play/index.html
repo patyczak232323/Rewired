@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Play Rewired in your browser: digital logic simulator</title>
+<meta name="description" content="Run the Rewired digital logic simulator in your browser, no install needed. Build circuits from NAND gates and play Snake on a CPU made of logic gates.">
+<link rel="canonical" href="https://patyczak232323.github.io/Rewired/play/">
+<link rel="icon" type="image/png" href="../images/logo.png">
+<meta name="theme-color" content="#231f20">
+<style>
+	html, body { margin: 0; height: 100%; overflow: hidden; background: #231f20; color: #ece9ea; }
+	body { font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif; }
+	#unity-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; background: #231f20; outline: none; }
+	.overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; }
+	.box { width: min(420px, 100%); text-align: center; }
+	.box img { width: 64px; height: 64px; margin: 0 auto 14px; display: block; }
+	.box p { margin: 0 0 14px; color: #a9a3a6; }
+	.box h1 { font-size: 1.3rem; margin: 0 0 10px; color: #ece9ea; }
+	.bar { height: 6px; background: #3a373b; border-radius: 3px; overflow: hidden; margin: 6px 0 12px; }
+	.bar div { height: 100%; width: 0; background: #e8b84a; transition: width 0.2s; }
+	a { color: #e8b84a; }
+	.btn { display: inline-block; margin: 4px; padding: 10px 18px; border-radius: 8px; border: 1px solid #3a373b; background: #2c2a2d; color: #ece9ea; text-decoration: none; font: inherit; cursor: pointer; }
+	.btn.primary { background: #e8b84a; border-color: #e8b84a; color: #1b1a1c; font-weight: 600; }
+	[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="unity-canvas" tabindex="-1"></canvas>
+
+<div class="overlay" id="mobile-note" hidden>
+	<div class="box">
+		<img src="../images/logo.png" alt="" width="64" height="64">
+		<h1 data-t="mobileTitle">Rewired works best on a computer</h1>
+		<p data-t="mobileText">The browser version needs a keyboard and mouse. On an Android phone or tablet, the app is easier to use.</p>
+		<a class="btn primary" href="https://github.com/patyczak232323/Rewired/releases/latest/download/DLSRewired-Android-arm64.apk" data-t="mobileApp">Get the Android app</a>
+		<button class="btn" id="load-anyway" type="button" data-t="mobileAnyway">Open here anyway</button>
+	</div>
+</div>
+
+<div class="overlay" id="loading" hidden>
+	<div class="box">
+		<img src="../images/logo.png" alt="" width="64" height="64">
+		<p data-t="loading">Loading Rewired (about 10 MB)…</p>
+		<div class="bar"><div id="progress"></div></div>
+		<p><a href="../" data-t="back">← Back to the Rewired page</a></p>
+	</div>
+</div>
+
+<div class="overlay" id="error" hidden>
+	<div class="box">
+		<img src="../images/logo.png" alt="" width="64" height="64">
+		<h1 data-t="errorTitle">Rewired could not start</h1>
+		<p data-t="errorText">Your browser may not support WebGL 2, or ran out of memory. Try an up-to-date Chrome, Edge or Firefox, or download the app.</p>
+		<p id="error-detail" style="font-size: 0.85rem; word-break: break-word;"></p>
+		<a class="btn primary" href="../#download" data-t="download">Download Rewired</a>
+	</div>
+</div>
+
+<script>
+	var texts = {
+		pl: {
+			mobileTitle: "Rewired najlepiej działa na komputerze",
+			mobileText: "Wersja przeglądarkowa wymaga klawiatury i myszy. Na telefonie lub tablecie z Androidem wygodniejsza jest aplikacja.",
+			mobileApp: "Pobierz aplikację na Androida",
+			mobileAnyway: "Otwórz mimo to",
+			loading: "Wczytywanie Rewired (około 10 MB)…",
+			back: "← Wróć na stronę Rewired",
+			errorTitle: "Nie udało się uruchomić Rewired",
+			errorText: "Twoja przeglądarka może nie obsługiwać WebGL 2 albo zabrakło jej pamięci. Spróbuj aktualnego Chrome'a, Edge'a lub Firefoksa albo pobierz aplikację.",
+			download: "Pobierz Rewired"
+		}
+	};
+
+	// The same language choice as on the main page: the switch there wins, otherwise the browser's language.
+	var lang = "en";
+	try {
+		var chosen = localStorage.getItem("rewired-lang");
+		var first = ((navigator.languages && navigator.languages[0]) || navigator.language || "").toLowerCase();
+		if (chosen === "pl" || (!chosen && first.indexOf("pl") === 0)) lang = "pl";
+	} catch (e) { }
+	if (texts[lang]) {
+		document.documentElement.lang = lang;
+		document.querySelectorAll("[data-t]").forEach(function (el) {
+			var t = texts[lang][el.getAttribute("data-t")];
+			if (t) el.textContent = t;
+		});
+		document.querySelector('#loading a').href = "../pl/";
+		document.querySelector('#error a').href = "../pl/#pobierz";
+	}
+
+	function show(id) {
+		["mobile-note", "loading", "error"].forEach(function (other) {
+			document.getElementById(other).hidden = other !== id;
+		});
+	}
+
+	function fail(message) {
+		show("error");
+		document.getElementById("error-detail").textContent = message ? String(message) : "";
+	}
+
+	var buildUrl = "Build";
+	var config = {
+		dataUrl: buildUrl + "/DLSRewired.data.unityweb",
+		frameworkUrl: buildUrl + "/DLSRewired.framework.js.unityweb",
+		codeUrl: buildUrl + "/DLSRewired.wasm.unityweb",
+		streamingAssetsUrl: "StreamingAssets",
+		// Must match the Unity player settings, which the build itself uses.
+		companyName: "SebastianLague",
+		productName: "Digital-Logic-Sim",
+		productVersion: "__VERSION__",
+		showBanner: function (message, type) {
+			if (type === "error") fail(message);
+			else console.warn(message);
+		}
+	};
+
+	function start() {
+		show("loading");
+		var canvas = document.getElementById("unity-canvas");
+		var script = document.createElement("script");
+		script.src = buildUrl + "/DLSRewired.loader.js";
+		script.onerror = function () { fail("Could not load " + script.src); };
+		script.onload = function () {
+			createUnityInstance(canvas, config, function (progress) {
+				document.getElementById("progress").style.width = Math.round(progress * 100) + "%";
+			}).then(function () {
+				show(null);
+				canvas.focus();
+			}).catch(fail);
+		};
+		document.body.appendChild(script);
+	}
+
+	var isPhoneOrTablet = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+		(navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+	if (isPhoneOrTablet) {
+		show("mobile-note");
+		document.getElementById("load-anyway").addEventListener("click", start);
+	} else {
+		start();
+	}
+</script>
+</body>
+</html>

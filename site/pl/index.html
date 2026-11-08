@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rewired: symulator układów cyfrowych. Zbuduj procesor z bramek NAND</title>
+<meta name="description" content="Darmowy symulator bramek logicznych i układów cyfrowych na Windows, Linux, Androida i do przeglądarki. Zbuduj z bramek NAND sumator, pamięć RAM i cały procesor, a potem zagraj na nim w Snake'a.">
+<link rel="canonical" href="https://patyczak232323.github.io/Rewired/pl/">
+<link rel="alternate" hreflang="en" href="https://patyczak232323.github.io/Rewired/">
+<link rel="alternate" hreflang="pl" href="https://patyczak232323.github.io/Rewired/pl/">
+<link rel="alternate" hreflang="x-default" href="https://patyczak232323.github.io/Rewired/">
+<link rel="icon" type="image/png" href="../images/logo.png">
+<link rel="stylesheet" href="../style.css">
+<meta name="theme-color" content="#1b1a1c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Rewired">
+<meta property="og:title" content="Rewired: zbuduj procesor z bramek NAND">
+<meta property="og:description" content="Darmowy symulator układów cyfrowych. Zbuduj bramki, pamięć i cały procesor, a potem zagraj na nim w Snake'a. Windows, Linux, Android i przeglądarka.">
+<meta property="og:url" content="https://patyczak232323.github.io/Rewired/pl/">
+<meta property="og:image" content="https://patyczak232323.github.io/Rewired/images/snake-pix6.png">
+<meta property="og:image:width" content="1600">
+<meta property="og:image:height" content="900">
+<meta property="og:locale" content="pl_PL">
+<meta property="og:locale:alternate" content="en_GB">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+	"@context": "https://schema.org",
+	"@type": "SoftwareApplication",
+	"name": "Rewired",
+	"description": "Darmowy symulator układów cyfrowych. Zbuduj z bramek NAND sumator, pamięć RAM i cały procesor.",
+	"inLanguage": "pl",
+	"applicationCategory": "EducationalApplication",
+	"operatingSystem": "Windows, Linux, Android, przeglądarka",
+	"softwareVersion": "__VERSION__",
+	"url": "https://patyczak232323.github.io/Rewired/pl/",
+	"downloadUrl": "https://github.com/patyczak232323/Rewired/releases/latest",
+	"image": "https://patyczak232323.github.io/Rewired/images/snake-pix6.png",
+	"license": "https://opensource.org/licenses/MIT",
+	"isAccessibleForFree": true,
+	"offers": { "@type": "Offer", "price": "0", "priceCurrency": "PLN" }
+}
+</script>
+</head>
+<body>
+
+<div class="wrap">
+	<header class="top">
+		<a class="brand" href="./"><img src="../images/logo.png" alt="" width="32" height="32">Rewired</a>
+		<nav>
+			<a href="#pobierz">Pobierz</a>
+			<a href="https://github.com/patyczak232323/Rewired">GitHub</a>
+			<span class="lang"><a href="../" data-lang="en" lang="en">EN</a> | <a href="./" aria-current="true" data-lang="pl" lang="pl">PL</a></span>
+		</nav>
+	</header>
+
+	<main>
+		<div class="hero">
+			<h1>Zbuduj komputer z bramek NAND</h1>
+			<p class="lead">Rewired to darmowy symulator układów cyfrowych. Zaczynasz od jednej bramki, składasz z niej własne układy i idziesz dalej, aż masz rejestry, pamięć RAM i działający procesor. A potem grasz na nim w Snake'a.</p>
+			<div class="buttons">
+				<a class="btn primary" href="../play/">Uruchom w przeglądarce</a>
+				<a class="btn" href="#pobierz">Pobierz</a>
+				<a class="btn" href="https://github.com/patyczak232323/Rewired">Kod źródłowy</a>
+			</div>
+			<p class="small">Wersja __VERSION__ · Windows, Linux, Android i przeglądarka · licencja MIT</p>
+
+			<figure class="shot">
+				<img src="../images/snake-pix6.png" width="1600" height="900" alt="Edytor Rewired z otwartym projektem Snake: części po lewej, procesor podłączony do ekranu 64 na 64 pośrodku, szczegóły po prawej">
+			</figure>
+			<p class="small">Projekt Snake dołączony do Rewired: mały procesor zbudowany z bramek logicznych, kolorowy ekran 64×64 i cztery klawisze.</p>
+		</div>
+
+		<section>
+			<h2>Co można w nim zrobić</h2>
+			<div class="grid">
+				<div class="card">
+					<h3>Budowanie od podstaw</h3>
+					<p>Stawiasz bramki, łączysz je przewodami i zamykasz całość we własny układ. Układy można wkładać w inne układy, tak głęboko, jak trzeba.</p>
+				</div>
+				<div class="card">
+					<h3>Zawsze ten sam wynik</h3>
+					<p>Symulacja jest deterministyczna: układ za każdym razem zachowuje się tak samo. Docenisz to przy przerzutnikach, licznikach i procesorach. Duże układy nadal działają szybko.</p>
+				</div>
+				<div class="card">
+					<h3>Szukanie błędów</h3>
+					<p>Tablice prawdy dla układów kombinacyjnych, pułapki zatrzymujące symulację, gdy pin się zmieni, wzrośnie, opadnie albo osiągnie wartość, i przebiegi czasowe.</p>
+				</div>
+				<div class="card">
+					<h3>Ekran i klawiatura</h3>
+					<p>Kolorowy ekran 64×64 i wejścia z klawiatury. Wystarczy na proste gry działające na sprzęcie, który sam zbudowałeś.</p>
+				</div>
+				<div class="card">
+					<h3>Eksport</h3>
+					<p>Układ można zapisać jako strukturalny Verilog, schemat SVG albo obrazek PNG.</p>
+				</div>
+				<div class="card">
+					<h3>Wygodna obsługa</h3>
+					<p><code>Ctrl+K</code> wyszukuje dowolną część lub polecenie, a <code>F1</code> pokazuje wszystkie skróty. Na Androidzie jest interfejs dotykowy dopasowany do palców.</p>
+				</div>
+			</div>
+		</section>
+
+		<section>
+			<h2>Trzy komputery do rozebrania na części</h2>
+			<p>Przy pierwszym uruchomieniu Rewired instaluje trzy przykładowe projekty. Znajdziesz je na ekranie startowym i każdy z nich jest zbudowany wyłącznie z bramek NAND.</p>
+			<ul class="plain">
+				<li><strong>Snake</strong>: procesor PIX6 rysujący na ekranie 64×64. Otwórz go i graj klawiszami W, A, S i D.</li>
+				<li><strong>CPU8</strong>: 8-bitowy procesor jednocyklowy z własną pamięcią ROM i RAM.</li>
+				<li><strong>Core8</strong>: 8-bitowy rdzeń procesora.</li>
+			</ul>
+			<figure class="shot">
+				<img src="../images/main-menu.png" width="1600" height="900" alt="Ekran startowy Rewired z ostatnimi projektami i przykładami Snake, CPU8 i Core8" loading="lazy">
+			</figure>
+		</section>
+
+		<section>
+			<h2>Układ opisany słowami</h2>
+			<p>Ręczne łączenie 16-bitowego sumatora szybko się nudzi. RHDL to mały język wbudowany w Rewired: opisujesz układ w kilku linijkach, a RHDL Studio zamienia go w zwykły obwód z bramek NAND i Twoich innych układów. Wynik możesz otworzyć, zajrzeć do środka i zmienić, tak samo jak coś zbudowanego ręcznie.</p>
+<pre><code>chip FullAdder
+    in A, B, CIN
+    out SUM, COUT
+
+    ab = A xor B
+    SUM = ab xor CIN
+    COUT = (A and B) or (CIN and ab)</code></pre>
+			<p class="small">Słowa kluczowe RHDL są po angielsku, tak jak w większości języków programowania.</p>
+			<ul class="plain">
+				<li><code>and</code>, <code>or</code>, <code>xor</code>, <code>not</code>, <code>nand</code>, <code>nor</code>, <code>xnor</code>, a do tego <code>+ -</code>, porównania i przesunięcia bitowe</li>
+				<li><code>if s then a else b</code> jako multiplekser</li>
+				<li>pojedyncze bity i zakresy (<code>A[3]</code>, <code>A[0..3]</code>) oraz <code>join(...)</code> do składania magistral</li>
+				<li>pętle <code>for i in 0..7</code> do łańcuchów, np. sumatora z przeniesieniem szeregowym</li>
+				<li>inne układy wywoływane jak funkcje: <code>q, nq = DffBit(d, clk)</code></li>
+				<li>sprzężenie zwrotne: nazwy można użyć powyżej linijki, która ją przypisuje, i tak właśnie zapisuje się przerzutniki i rejestry</li>
+			</ul>
+			<div class="split">
+				<figure class="shot">
+					<img src="../images/rhdl-studio.png" width="1600" height="735" alt="RHDL Studio z 8-bitową jednostką arytmetyczno-logiczną zapisaną w RHDL" loading="lazy">
+					<figcaption>8-bitowa jednostka ALU w RHDL Studio…</figcaption>
+				</figure>
+				<figure class="shot">
+					<img src="../images/rhdl-generated-alu.png" width="1600" height="850" alt="Ta sama jednostka ALU zbudowana z bramek w edytorze" loading="lazy">
+					<figcaption>…i obwód, który z niej powstaje.</figcaption>
+				</figure>
+			</div>
+		</section>
+
+		<section id="pobierz">
+			<h2>Pobierz</h2>
+			<p>Rewired jest darmowy. Wybierz swój system:</p>
+			<div class="downloads">
+				<a class="dl" href="https://github.com/patyczak232323/Rewired/releases/latest/download/DLSRewired-Windows-x64.zip">
+					<strong>Windows</strong>
+					<span>64-bitowy, zip. Rozpakuj i uruchom DLSRewired.exe.</span>
+				</a>
+				<a class="dl" href="https://github.com/patyczak232323/Rewired/releases/latest/download/DLSRewired-Linux-x86_64.zip">
+					<strong>Linux</strong>
+					<span>x86_64, zip. Rozpakuj i uruchom DLSRewired.</span>
+				</a>
+				<a class="dl" href="https://github.com/patyczak232323/Rewired/releases/latest/download/DLSRewired-Android-arm64.apk">
+					<strong>Android</strong>
+					<span>Plik APK, wersja eksperymentalna.</span>
+				</a>
+				<a class="dl" href="../play/">
+					<strong>Przeglądarka</strong>
+					<span>Bez instalacji. Potrzebne są klawiatura i mysz.</span>
+				</a>
+			</div>
+			<ul class="plain small">
+				<li>Windows może ostrzec, że aplikacja pochodzi od nieznanego wydawcy, bo nie ma podpisu cyfrowego. Kliknij <em>Więcej informacji</em>, a potem <em>Uruchom mimo to</em>.</li>
+				<li>Na Linuksie plik może wymagać nadania uprawnień do uruchamiania: <code>chmod +x DLSRewired</code>.</li>
+				<li>Na Androidzie zezwól przeglądarce lub menedżerowi plików na instalowanie aplikacji, a potem otwórz plik APK.</li>
+				<li>Wersje na Windows, Linux i Androida po uruchomieniu same sprawdzają aktualizacje i mogą je zainstalować. Można to wyłączyć w ustawieniach.</li>
+			</ul>
+			<p>Starsze wersje i listy zmian są w <a href="https://github.com/patyczak232323/Rewired/releases">GitHub Releases</a>.</p>
+		</section>
+
+		<section>
+			<h2>W przeglądarce</h2>
+			<p><a href="../play/">Wersja przeglądarkowa</a> to ten sam edytor, do pobrania jest około 10&nbsp;MB. Projekty zapisują się w pamięci przeglądarki na tym komputerze, więc wyczyszczenie danych strony je usuwa. Interfejs programu jest po angielsku. Przy dużych układach i do eksportu plików lepiej sprawdza się pobrana aplikacja: działa szybciej i zapisuje do zwykłych folderów.</p>
+		</section>
+
+		<section>
+			<h2>Skąd się wziął</h2>
+			<p>Rewired jest forkiem programu <a href="https://github.com/SebLague/Digital-Logic-Sim">Digital Logic Sim</a> autorstwa Sebastiana Lague'a. Edytor i format projektów opierają się na jego pracy. Silnik symulacji jest napisany od nowa, a RHDL, ekran i wersja na Androida doszły później.</p>
+			<p>Większość projektów z Digital Logic Sim otwiera się w Rewired. Układy, które zależały od kolejności przeliczania bramek albo od wyścigów w pętlach sprzężenia zwrotnego, mogą działać inaczej, bo Rewired zawsze daje jedną, przewidywalną odpowiedź.</p>
+			<p>Trafiłeś na układ, który działa źle? <a href="https://github.com/patyczak232323/Rewired/issues">Zgłoś to na GitHubie</a> i dołącz projekt. Zgłoszenia po polsku też są w porządku.</p>
+		</section>
+	</main>
+
+	<footer>
+		<p>Rewired jest otwartym oprogramowaniem na <a href="https://github.com/patyczak232323/Rewired/blob/main/LICENSE">licencji MIT</a>. Kod źródłowy jest na <a href="https://github.com/patyczak232323/Rewired">GitHubie</a>.</p>
+		<p>Niezależny projekt, niezwiązany z Sebastianem Lague'em.</p>
+	</footer>
+</div>
+
+<script>
+	// Zapamiętaj język wybrany przełącznikiem na górze strony.
+	document.querySelectorAll("[data-lang]").forEach(function (a) {
+		a.addEventListener("click", function () {
+			try { localStorage.setItem("rewired-lang", a.getAttribute("data-lang")); } catch (e) { }
+		});
+	});
+</script>
+</body>
+</html>
