@@ -209,7 +209,7 @@ namespace Seb.Vis
 
 			static void CreateShapeDrawers()
 			{
-				shapeDrawer = new InstancedDrawer<ShapeData>(quadMesh, Shader.Find("Vis/Draw"));
+				shapeDrawer = new ShapeDrawer(quadMesh, Shader.Find("Vis/Draw"));
 				textDrawer = new TextDrawManager();
 			}
 		}
@@ -238,6 +238,24 @@ namespace Seb.Vis
 			RegisterCallbacks();
 			Init();
 		}
+
+		// Where shaders cannot read structured buffers (WebGL, and GPUs without compute support),
+		// shapes and text are drawn from ordinary meshes instead of with indirect instancing.
+		// Starting with "-mesh-rendering" uses that way on any platform, to try it out.
+		public static bool UseMeshRendering
+		{
+			get
+			{
+				useMeshRendering ??= Application.platform == RuntimePlatform.WebGLPlayer ||
+				                     !SystemInfo.supportsComputeShaders ||
+				                     SystemInfo.maxComputeBufferInputsVertex < 2 ||
+				                     SystemInfo.maxComputeBufferInputsFragment < 2 ||
+				                     Array.Exists(Environment.GetCommandLineArgs(), a => string.Equals(a, "-mesh-rendering", StringComparison.OrdinalIgnoreCase));
+				return useMeshRendering.Value;
+			}
+		}
+
+		static bool? useMeshRendering;
 
 		public readonly struct LayerInfo
 		{

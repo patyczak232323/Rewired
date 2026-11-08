@@ -98,7 +98,7 @@ Release packages:
 
 - Windows x64: `DLSRewired-Windows-x64.zip`
 - Linux x86_64: `DLSRewired-Linux-x86_64.zip`
-- WebGL (browser): `DLSRewired-WebGL.zip`. **Known issue:** the browser build currently shows an empty grey screen, because the editor draws with indirect instanced rendering, which WebGL does not support. Use a desktop or Android build for now.
+- WebGL (browser): `DLSRewired-WebGL.zip`. Unzip it and serve the folder from any static web host (see [Getting Started](Docs/GETTING_STARTED.md)).
 - Android ARM64 (experimental): `DLSRewired-Android-arm64.apk`
 
 On Linux, after extracting the archive, the executable may need permission:
