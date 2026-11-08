@@ -319,6 +319,12 @@ jobs:
     if: ${{ !cancelled() && needs.build.result == 'success' }}
 
     steps:
+      # Only the release notes are needed from the repository.
+      - name: Checkout release notes
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: Docs/releases
+
       - name: Download packaged builds
         uses: actions/download-artifact@v4
         with:
@@ -348,12 +354,20 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Written notes in Docs/releases/<version>.md when there are some, else GitHub's.
+          notes_file="Docs/releases/${TAG#v}.md"
+          if [ -f "$notes_file" ]; then
+            notes=(--notes-file "$notes_file")
+          else
+            notes=(--generate-notes)
+          fi
+
           if ! gh release view "$TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
             gh release create "$TAG" \
               --repo "$REPOSITORY" \
               --target "$TARGET" \
               --title "Rewired $TAG" \
-              --generate-notes
+              "${notes[@]}"
           fi
 
           assets=(
