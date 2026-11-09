@@ -39,6 +39,7 @@ namespace DLS.Graphics
 
 			HandleKeyboardShortcuts();
 
+			DevSceneDrawer.UseFullDetail();
 			DevSceneDrawer.DrawSubChip(chip);
 			WorldDrawer.DrawGridIfActive(ColHelper.MakeCol255(0, 0, 0, 100));
 

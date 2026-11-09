@@ -41,6 +41,47 @@ namespace DLS.Graphics
 			Vector2 centre = cam.transform.position;
 			Vector2 halfSize = new(halfWidth + padding, halfHeight + padding);
 			viewCullBounds = new Bounds2D(centre - halfSize, centre + halfSize);
+
+			// Level of detail. Zoomed out on a big chip (PIX6 has over 1500 NAND gates) most
+			// names and pins are smaller than a pixel, yet each one still costs text layout and
+			// shapes every frame. Skip what could not be seen anyway.
+			float pixelsPerUnit = Screen.height / Mathf.Max(0.0001f, 2 * halfHeight);
+			drawChipNames = FontSizeChipName * pixelsPerUnit >= MinVisibleTextPixels;
+			drawLabels = FontSizePinLabel * pixelsPerUnit >= MinVisibleTextPixels;
+			drawSingleBitSubChipPins = PinRadius * pixelsPerUnit >= MinVisiblePinRadiusPixels;
+			minWireSegmentLength = MinWireSegmentPixels / pixelsPerUnit;
+		}
+
+		const float MinVisibleTextPixels = 3f;
+		const float MinVisiblePinRadiusPixels = 0.75f;
+		const float MinWireSegmentPixels = 1f;
+		static bool drawChipNames = true;
+		static bool drawLabels = true;
+		static bool drawSingleBitSubChipPins = true;
+		static float minWireSegmentLength;
+
+		// The customization scene draws one chip up close and must not inherit the zoomed-out detail level.
+		public static void UseFullDetail()
+		{
+			drawChipNames = true;
+			drawLabels = true;
+			drawSingleBitSubChipPins = true;
+			minWireSegmentLength = 0;
+		}
+
+		// Width of chip names, which only change when a chip is renamed (a new string).
+		static readonly Dictionary<string, float> chipNameWidthCache = new();
+
+		static float ChipNameWidth(string name)
+		{
+			if (!chipNameWidthCache.TryGetValue(name, out float width))
+			{
+				if (chipNameWidthCache.Count > 4096) chipNameWidthCache.Clear();
+				width = Draw.CalculateTextBoundsSize(name, FontSizeChipName, FontBold).x;
+				chipNameWidthCache[name] = width;
+			}
+
+			return width;
 		}
 
 		// Touch: a fingertip is several times wider than a pin, so on the touch interface a touch
@@ -191,6 +232,7 @@ namespace DLS.Graphics
 
 			foreach (IMoveable element in chip.Elements)
 			{
+				if (!drawLabels) break;
 				if (!IsElementVisible(element)) continue;
 
 				if (element is DevPinInstance devPin)
@@ -261,8 +303,8 @@ namespace DLS.Graphics
 			{
 				if (element.IsSelected == drawSelectedOnly && IsElementVisible(element))
 				{
-					// Draw displays
-					if (element is SubChipInstance subchip)
+					// Draw displays (looking up the sim chip is a linear search, so only for chips that have one)
+					if (element is SubChipInstance subchip && subchip.Displays.Count > 0)
 					{
 						// Get sim representation of this subchip (note: if the subchip has not yet been placed, this will be null)
 						SimChip sim = chip.SimChip.TryGetSubChipFromID(subchip.ID).chip;
@@ -381,6 +423,7 @@ namespace DLS.Graphics
 			{
 				// Hide input pin on bus origin chips, since player connects to the bus wire instead (input pin is only used behind the scenes)
 				if (i == 0 && ChipTypeHelper.IsBusOriginType(subchip.Description.ChipType)) continue;
+				if (!drawSingleBitSubChipPins && subchip.AllPins[i].bitCount == PinBitCount.Bit1) continue;
 
 				DrawPin(subchip.AllPins[i]);
 			}
@@ -401,11 +444,11 @@ namespace DLS.Graphics
 			}
 
 			// Draw name
-			if (isKeyChip || desc.NameLocation != NameDisplayLocation.Hidden)
+			if (drawChipNames && (isKeyChip || desc.NameLocation != NameDisplayLocation.Hidden))
 			{
 				// Display on single line if name fits comfortably, otherwise use 'formatted' version (split across multiple lines)
 				string displayName = isKeyChip ? subchip.activationKeyString : subchip.MultiLineName;
-				if (Draw.CalculateTextBoundsSize(subchip.Description.Name, FontSizeChipName, FontBold).x < subchip.Size.x - PinRadius * 2.5f)
+				if (ChipNameWidth(subchip.Description.Name) < subchip.Size.x - PinRadius * 2.5f)
 				{
 					displayName = subchip.Description.Name;
 				}
@@ -888,7 +931,7 @@ namespace DLS.Graphics
 
 			// Draw
 			Color col = wire.GetColour(0);
-			float interactSqrDst = WireDrawer.DrawWireStraight(wire.BitWires[0].Points, thickness, col, mousePos);
+			float interactSqrDst = WireDrawer.DrawWireStraight(wire.BitWires[0].Points, thickness, col, mousePos, minWireSegmentLength);
 
 			// Draw connection point (if connects to wire)
 			if (wire.ConnectedWire != null)
@@ -921,7 +964,7 @@ namespace DLS.Graphics
 			{
 				WireInstance.BitWire bitWire = wire.BitWires[bitIndex];
 				Color col = wire.GetColour(bitIndex);
-				float sqrInteractDst = WireDrawer.DrawWireStraight(bitWire.Points, thickness, col, mousePos);
+				float sqrInteractDst = WireDrawer.DrawWireStraight(bitWire.Points, thickness, col, mousePos, minWireSegmentLength);
 				if (canInteract && sqrInteractDst < sqrDstThreshold) InteractionState.NotifyElementUnderMouse(wire);
 			}
 		}
