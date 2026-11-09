@@ -21,16 +21,24 @@ namespace DLS.Graphics
 
 		static bool unsavedChanges;
 		static float unsavedCheckTime = -1;
+		static int unsavedCheckFingerprint;
 
-		// Whether the open chip differs from its saved version. Comparing builds a description of
-		// the chip, so it is checked at most twice a second.
+		// Whether the open chip differs from its saved version. The full comparison serializes the
+		// whole chip (seconds for a chip like PIX6), so it only runs when a cheap fingerprint of the
+		// chip changed, at most twice a second, counted from when the last check finished.
 		public static bool ActiveChipHasUnsavedChanges(Project project)
 		{
 			if (project == null) return false;
-			if (unsavedCheckTime < 0 || Time.unscaledTime - unsavedCheckTime > 0.5f)
+			if (unsavedCheckTime < 0 || Time.realtimeSinceStartup - unsavedCheckTime > 0.5f)
 			{
-				unsavedCheckTime = Time.unscaledTime;
-				unsavedChanges = project.ActiveChipHasUnsavedChanges();
+				int fingerprint = project.ViewedChipEditFingerprint();
+				if (unsavedCheckTime < 0 || fingerprint != unsavedCheckFingerprint)
+				{
+					unsavedChanges = project.ActiveChipHasUnsavedChanges();
+					unsavedCheckFingerprint = fingerprint;
+				}
+
+				unsavedCheckTime = Time.realtimeSinceStartup;
 			}
 
 			return unsavedChanges;
