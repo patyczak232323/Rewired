@@ -6,14 +6,18 @@ namespace DLS.Graphics
 {
 	public static class WireDrawer
 	{
-		public static float DrawWireStraight(Vector2[] points, float thickness, Color col, Vector2 interactPos)
+		// Points closer than minSegmentLength to the last drawn point are skipped (the end point never is),
+		// so a wire zoomed out to a few pixels is not drawn as dozens of sub-pixel segments.
+		public static float DrawWireStraight(Vector2[] points, float thickness, Color col, Vector2 interactPos, float minSegmentLength = 0)
 		{
 			float interactSqrDst = float.MaxValue;
+			float minSqrLength = minSegmentLength * minSegmentLength;
 			Vector2 inA = points[0];
 
 			for (int i = 1; i < points.Length; i++)
 			{
 				Vector2 inB = points[i];
+				if (i < points.Length - 1 && (inB - inA).sqrMagnitude < minSqrLength) continue;
 				WireSegmentDraw(inA, inB, thickness, col, interactPos, ref interactSqrDst);
 				inA = inB;
 			}
