@@ -94,6 +94,9 @@ namespace DLS.Description
 		public int ResolutionY;
 		public FullScreenMode fullscreenMode;
 		public bool VSyncEnabled;
+
+		// Experimental: keep the circuit's shapes in a GPU buffer instead of rebuilding them every frame.
+		public bool GpuRendering;
 		public ShortcutBinding[] KeyBindings;
 
 		// Example projects that came with Rewired and were already copied into the projects

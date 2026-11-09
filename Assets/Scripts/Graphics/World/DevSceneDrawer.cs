@@ -6,6 +6,7 @@ using DLS.Simulation;
 using Seb.Helpers;
 using Seb.Types;
 using Seb.Vis;
+using Seb.Vis.Internal;
 using Seb.Vis.Text.Rendering;
 using UnityEngine;
 using static DLS.Graphics.DrawSettings;
@@ -157,6 +158,15 @@ namespace DLS.Graphics
 			touchPinCandidateDst = float.MaxValue;
 			touchSnappedPin = null;
 
+			// Experimental GPU rendering: wires and subchips come from a buffer that stays on the GPU,
+			// drawn at the start of a new layer (above the grid, below everything else).
+			gpuSceneActive = UpdateGpuScene();
+			if (gpuSceneActive)
+			{
+				Draw.StartLayer(Vector2.zero, 1, false);
+				gpuShapes.Draw();
+			}
+
 			DrawWires();
 			DrawWireEditPoints(controller.wireToEdit);
 
@@ -212,7 +222,14 @@ namespace DLS.Graphics
 			// Draw
 			foreach (WireInstance wire in orderedWires)
 			{
-				DrawWire(wire);
+				if (gpuSceneActive && gpuWires.TryGetValue(wire, out GpuRange range))
+				{
+					DrawCachedWire(wire, range);
+				}
+				else
+				{
+					DrawWire(wire);
+				}
 			}
 
 			foreach (WireInstance wire in controller.DuplicatedWires)
@@ -287,7 +304,18 @@ namespace DLS.Graphics
 							break;
 						case SubChipInstance subchip:
 						{
-							DrawSubChip(subchip);
+							if (gpuSceneActive && !drawSelectedOnly && IsGpuCachedSubChip(subchip))
+							{
+								// Shapes are in the GPU cache; still run hover detection and draw the name.
+								Draw.SetShapeSink(Draw.ShapeSink.Discard);
+								DrawSubChip(subchip);
+								Draw.SetShapeSink(Draw.ShapeSink.Draw);
+							}
+							else
+							{
+								DrawSubChip(subchip);
+							}
+
 							break;
 						}
 					}
@@ -891,7 +919,7 @@ namespace DLS.Graphics
 		// Wire should be highlighted if mouse is over it or if in edit mode
 		static bool ShouldHighlightWire(WireInstance wire)
 		{
-			if (InteractionState.MouseIsOverUI) return false;
+			if (gpuCapturing || InteractionState.MouseIsOverUI) return false;
 			if (wire == controller.wireToEdit) return true;
 
 			if (InteractionState.ElementUnderMousePrevFrame is WireInstance wireUnderMouse && wire == wireUnderMouse)
@@ -1043,6 +1071,7 @@ namespace DLS.Graphics
 			if (mouseOverPin) InteractionState.NotifyElementUnderMouse(pin);
 			else if (touchPinReach > 0) ConsiderPinForTouch(pin, Mathf.Max(0, Vector2.Distance(InputHelper.MousePosWorld, pinPos) - PinRadius));
 			mouseOverPin |= pin == touchSnappedPin;
+			if (gpuCapturing) mouseOverPin = false; // the GPU cache keeps pins unhighlighted
 			bool canInteract = controller.CanInteractWithPin;
 
 			Color pinCol = mouseOverPin && canInteract ? ActiveTheme.PinHighlightCol : ActiveTheme.PinCol;
@@ -1073,6 +1102,7 @@ namespace DLS.Graphics
 				ConsiderPinForTouch(pin, outside.magnitude);
 			}
 			mouseOverPin |= pin == touchSnappedPin;
+			if (gpuCapturing) mouseOverPin = false; // the GPU cache keeps pins unhighlighted
 			bool canInteract = controller.CanInteractWithPin;
 
 			Color pinCol = mouseOverPin && canInteract ? ActiveTheme.PinHighlightCol : ActiveTheme.PinCol;
@@ -1126,6 +1156,210 @@ namespace DLS.Graphics
 				int intV = (int)(v / gridSize);
 				return intV * gridSize;
 			}
+		}
+
+		// ---- Experimental GPU rendering (Settings > Rendering) ----
+		// Wires and subchips of the viewed chip are captured once, at full detail and without
+		// culling, into a buffer that stays on the GPU. Each frame only the wires whose colour
+		// changed are captured again and uploaded. Everything else (dev pins, keys, displays,
+		// names, the hovered wire or pin) is drawn the normal way on top. While anything is being
+		// selected, moved, placed or edited the normal renderer is used and the cache is rebuilt
+		// once that ends. The cache is also rebuilt when the chip's layout changes in any way.
+
+		struct GpuRange
+		{
+			public int start;
+			public int count;
+			public int key;
+		}
+
+		static bool gpuSceneActive;
+		static bool gpuCapturing;
+		static CachedShapeBuffer gpuShapes;
+		static readonly List<ShapeData> gpuCapture = new();
+		static readonly List<ShapeData> gpuPatch = new();
+		static readonly Dictionary<WireInstance, GpuRange> gpuWires = new();
+		static readonly List<WireInstance> gpuWireOrder = new();
+		static DevChipInstance gpuChip;
+		static int gpuSignature;
+		static bool gpuNeedsRebuild = true;
+
+		static bool IsGpuCachedSubChip(SubChipInstance subchip) => subchip.ChipType != ChipType.Key;
+
+		static bool UpdateGpuScene()
+		{
+			bool enabled = Main.ActiveAppSettings.GpuRendering && Draw.SupportsCachedShapes;
+			if (!enabled)
+			{
+				ReleaseGpuScene();
+				return false;
+			}
+
+			bool interacting = controller.SelectedElements.Count > 0 || controller.IsMovingSelection || controller.IsCreatingWire ||
+			                   controller.IsPlacingElements || controller.wireToEdit != null || controller.WireToPlace != null ||
+			                   controller.DuplicatedWires.Count > 0;
+			if (interacting)
+			{
+				gpuNeedsRebuild = true;
+				return false;
+			}
+
+			DevChipInstance chip = controller.ActiveDevChip;
+			int signature = GpuLayoutSignature(chip);
+			if (gpuNeedsRebuild || chip != gpuChip || signature != gpuSignature)
+			{
+				RebuildGpuScene(chip);
+				gpuChip = chip;
+				gpuSignature = signature;
+				gpuNeedsRebuild = false;
+			}
+
+			return true;
+		}
+
+		// Changes whenever something the cache drew could have moved or changed shape.
+		static int GpuLayoutSignature(DevChipInstance chip)
+		{
+			HashCode hash = new();
+			hash.Add(chip);
+			hash.Add(ActiveTheme);
+			hash.Add(chip.Elements.Count);
+			hash.Add(chip.Wires.Count);
+
+			foreach (IMoveable element in chip.Elements)
+			{
+				Bounds2D bounds = element.SelectionBoundingBox;
+				hash.Add(bounds.Centre);
+				hash.Add(bounds.Size);
+				if (element is SubChipInstance subchip)
+				{
+					hash.Add(subchip.Description.Colour);
+					hash.Add(subchip.Description.Name);
+					hash.Add(subchip.Description.NameLocation);
+				}
+			}
+
+			foreach (WireInstance wire in chip.Wires)
+			{
+				hash.Add(wire.WirePointCount);
+				for (int i = 0; i < wire.WirePointCount; i++)
+				{
+					hash.Add(wire.GetWirePoint(i));
+				}
+			}
+
+			return hash.ToHashCode();
+		}
+
+		static int GpuWireKey(WireInstance wire)
+		{
+			HashCode hash = new();
+			hash.Add(wire.SourcePin.State);
+			for (int i = 0; i < wire.BitWires.Length; i++)
+			{
+				hash.Add(wire.GetColour(i));
+			}
+
+			return hash.ToHashCode();
+		}
+
+		static void RebuildGpuScene(DevChipInstance chip)
+		{
+			gpuShapes ??= new CachedShapeBuffer();
+			gpuCapture.Clear();
+			gpuWires.Clear();
+
+			gpuWireOrder.Clear();
+			foreach (WireInstance wire in chip.Wires)
+			{
+				if (!wire.IsFullyConnected) continue;
+				wire.drawOrder = WireDrawOrder(wire);
+				gpuWireOrder.Add(wire);
+			}
+
+			gpuWireOrder.Sort(WireComparison);
+
+			BeginGpuCapture(gpuCapture);
+
+			foreach (WireInstance wire in gpuWireOrder)
+			{
+				int start = gpuCapture.Count;
+				DrawWire(wire);
+				gpuWires[wire] = new GpuRange { start = start, count = gpuCapture.Count - start, key = GpuWireKey(wire) };
+			}
+
+			foreach (IMoveable element in chip.Elements)
+			{
+				if (element is SubChipInstance subchip && IsGpuCachedSubChip(subchip)) DrawSubChip(subchip);
+			}
+
+			EndGpuCapture();
+			gpuShapes.SetShapes(gpuCapture);
+		}
+
+		// A wire that is in the cache: refresh its shapes if its colour changed, then run hover
+		// detection without drawing it again. A highlighted wire is drawn on top of its cached copy.
+		static void DrawCachedWire(WireInstance wire, GpuRange range)
+		{
+			int key = GpuWireKey(wire);
+			if (key != range.key)
+			{
+				gpuPatch.Clear();
+				BeginGpuCapture(gpuPatch);
+				DrawWire(wire);
+				EndGpuCapture();
+
+				if (gpuPatch.Count == range.count)
+				{
+					gpuShapes.Patch(range.start, gpuPatch);
+					range.key = key;
+					gpuWires[wire] = range;
+				}
+				else
+				{
+					gpuNeedsRebuild = true;
+				}
+			}
+
+			if (ShouldHighlightWire(wire))
+			{
+				DrawWire(wire);
+			}
+			else
+			{
+				Draw.SetShapeSink(Draw.ShapeSink.Discard);
+				DrawWire(wire);
+				Draw.SetShapeSink(Draw.ShapeSink.Draw);
+			}
+		}
+
+		// Capture at full detail, independent of the zoom, so the cache survives zooming.
+		static (bool names, bool labels, bool pins, float segment) gpuSavedDetail;
+
+		static void BeginGpuCapture(List<ShapeData> into)
+		{
+			gpuSavedDetail = (drawChipNames, drawLabels, drawSingleBitSubChipPins, minWireSegmentLength);
+			UseFullDetail();
+			gpuCapturing = true;
+			Draw.SetShapeSink(Draw.ShapeSink.Capture, into);
+		}
+
+		static void EndGpuCapture()
+		{
+			Draw.SetShapeSink(Draw.ShapeSink.Draw);
+			gpuCapturing = false;
+			(drawChipNames, drawLabels, drawSingleBitSubChipPins, minWireSegmentLength) = gpuSavedDetail;
+		}
+
+		static void ReleaseGpuScene()
+		{
+			if (gpuShapes == null) return;
+			gpuShapes.Dispose();
+			gpuShapes = null;
+			gpuWires.Clear();
+			gpuWireOrder.Clear();
+			gpuChip = null;
+			gpuNeedsRebuild = true;
 		}
 
 		static int WireOrderCompare(WireInstance a, WireInstance b) => a.drawOrder.CompareTo(b.drawOrder);
