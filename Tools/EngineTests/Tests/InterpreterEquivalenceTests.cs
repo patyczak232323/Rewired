@@ -10,11 +10,13 @@ using UnityEngine;
 
 namespace DLS.Tests
 {
-	// IL2CPP (Android, WebGL) cannot generate code at run time, so there the JIT compilers run
-	// their gate programs through GateProgram's interpreter instead. These tests compile every
-	// chip of the bundled projects both ways and feed the native and the interpreted program
-	// the same random signals, comparing every slot bit for bit. That covers every operation,
-	// tri-state flags and constants included, independently of power-on randomness.
+	// IL2CPP (Android, WebGL) cannot generate code at run time, so there the combinational JIT
+	// runs its gate programs through GateProgram's interpreter instead. These tests compile every
+	// combinational chip of the bundled projects both ways and feed the native and the
+	// interpreted program the same random signals, comparing every slot bit for bit. That covers
+	// every operation, tri-state flags and constants included, independently of power-on
+	// randomness. Feedback programs always run on the interpreter; their settling executor is
+	// compared with full sweeps of the same program.
 	public class InterpreterEquivalenceTests
 	{
 		const int RoundsPerProgram = 150;
@@ -34,7 +36,6 @@ namespace DLS.Tests
 		static void UseInterpreter(bool interpret)
 		{
 			CombinationalJitCompiler.ForceInterpreter = interpret;
-			FeedbackJitCompiler.ForceInterpreter = interpret;
 			CombinationalJitCompiler.NotifyDescriptionsChanged();
 			FeedbackJitCompiler.NotifyDescriptionsChanged();
 		}
@@ -107,95 +108,34 @@ namespace DLS.Tests
 			TestContext.WriteLine($"{project}: {compared} combinational programs compared");
 		}
 
-		[TestCaseSource(nameof(BundledProjects))]
-		public void FeedbackProgramsMatchNativeCode(string project)
-		{
-			Assume.That(FeedbackJitCompiler.DynamicCodeAvailable, "needs a platform that can generate code to compare against");
-			Random random = new(5678);
-			int compared = 0;
-
-			foreach (SimChip root in AllCustomChips(CustomChipsOf(project, out _)))
-			{
-				CompiledFeedbackProgram native = FeedbackJitCompiler.TryCompileStandalone(root, root.Description.Name);
-				if (native == null) continue;
-				FeedbackJitCompiler.ForceInterpreter = true;
-				CompiledFeedbackProgram interpreted = FeedbackJitCompiler.TryCompileStandalone(root, root.Description.Name);
-				FeedbackJitCompiler.ForceInterpreter = false;
-				Assert.IsNotNull(interpreted, root.Description.Name);
-				Assert.AreEqual(native.ScratchCount, interpreted.ScratchCount, root.Description.Name);
-
-				for (int round = 0; round < RoundsPerProgram; round++)
-				{
-					uint[] current = RandomSignals(random, native.ScratchCount);
-					uint[] nextA = RandomSignals(random, native.ScratchCount);
-					uint[] nextB = (uint[])nextA.Clone();
-					native.RunSweep(current, nextA);
-					interpreted.RunSweep((uint[])current.Clone(), nextB);
-					CollectionAssert.AreEqual(nextA, nextB, $"{root.Description.Name}: sweep differs in round {round}");
-
-					uint[] outputsA = new uint[native.OutputCount];
-					uint[] outputsB = new uint[native.OutputCount];
-					native.WriteOutputs(nextA, outputsA);
-					interpreted.WriteOutputs(nextB, outputsB);
-					CollectionAssert.AreEqual(outputsA, outputsB, $"{root.Description.Name}: outputs differ in round {round}");
-				}
-
-				compared++;
-			}
-
-			TestContext.WriteLine($"{project}: {compared} feedback programs compared");
-		}
-
 		// Chips that use every primitive the compilers support, including unconnected inputs
 		// (constants), because the bundled projects do not use all of them.
-		[TestCase(false)]
-		[TestCase(true)]
-		public void EveryPrimitiveMatchesNativeCode(bool withFeedback)
+		[Test]
+		public void EveryPrimitiveMatchesNativeCode()
 		{
-			Assume.That(CombinationalJitCompiler.DynamicCodeAvailable && FeedbackJitCompiler.DynamicCodeAvailable, "needs a platform that can generate code to compare against");
+			Assume.That(CombinationalJitCompiler.DynamicCodeAvailable, "needs a platform that can generate code to compare against");
 			ChipLibrary library = TestLibrary.Create();
-			ChipDescription description = EveryPrimitiveChip(library, withFeedback);
+			ChipDescription description = EveryPrimitiveChip(library, false);
 			library.NotifyChipSaved(description, false);
 			SimChip root = RewiredEngine.BuildChip(description, library);
 			Random random = new(91011);
 
-			if (withFeedback)
-			{
-				CompiledFeedbackProgram native = FeedbackJitCompiler.TryCompileStandalone(root, description.Name);
-				Assert.IsNotNull(native, "the chip should compile as a feedback program");
-				FeedbackJitCompiler.ForceInterpreter = true;
-				CompiledFeedbackProgram interpreted = FeedbackJitCompiler.TryCompileStandalone(root, description.Name);
-				Assert.IsNotNull(interpreted);
+			CompiledCombinationalProgram native = CombinationalJitCompiler.TryCompileStandalone(root, description.Name);
+			Assert.IsNotNull(native, "the chip should compile as a combinational program");
+			CombinationalJitCompiler.ForceInterpreter = true;
+			CompiledCombinationalProgram interpreted = CombinationalJitCompiler.TryCompileStandalone(root, description.Name);
+			Assert.IsNotNull(interpreted);
 
-				for (int round = 0; round < 5000; round++)
-				{
-					uint[] current = RandomSignals(random, native.ScratchCount);
-					uint[] nextA = RandomSignals(random, native.ScratchCount);
-					uint[] nextB = (uint[])nextA.Clone();
-					native.RunSweep(current, nextA);
-					interpreted.RunSweep(current, nextB);
-					CollectionAssert.AreEqual(nextA, nextB, $"sweep differs in round {round}");
-				}
-			}
-			else
+			for (int round = 0; round < 5000; round++)
 			{
-				CompiledCombinationalProgram native = CombinationalJitCompiler.TryCompileStandalone(root, description.Name);
-				Assert.IsNotNull(native, "the chip should compile as a combinational program");
-				CombinationalJitCompiler.ForceInterpreter = true;
-				CompiledCombinationalProgram interpreted = CombinationalJitCompiler.TryCompileStandalone(root, description.Name);
-				Assert.IsNotNull(interpreted);
-
-				for (int round = 0; round < 5000; round++)
-				{
-					uint[] scratchA = RandomSignals(random, native.ScratchCount);
-					uint[] scratchB = (uint[])scratchA.Clone();
-					uint[] outputsA = new uint[native.OutputCount];
-					uint[] outputsB = new uint[native.OutputCount];
-					native.Run(scratchA, outputsA);
-					interpreted.Run(scratchB, outputsB);
-					CollectionAssert.AreEqual(scratchA, scratchB, $"scratch differs in round {round}");
-					CollectionAssert.AreEqual(outputsA, outputsB, $"outputs differ in round {round}");
-				}
+				uint[] scratchA = RandomSignals(random, native.ScratchCount);
+				uint[] scratchB = (uint[])scratchA.Clone();
+				uint[] outputsA = new uint[native.OutputCount];
+				uint[] outputsB = new uint[native.OutputCount];
+				native.Run(scratchA, outputsA);
+				interpreted.Run(scratchB, outputsB);
+				CollectionAssert.AreEqual(scratchA, scratchB, $"scratch differs in round {round}");
+				CollectionAssert.AreEqual(outputsA, outputsB, $"outputs differ in round {round}");
 			}
 		}
 
@@ -277,13 +217,12 @@ namespace DLS.Tests
 			return chip.Build();
 		}
 
-		// The interpreted feedback executor settles by evaluating only what changed (GateProgram
-		// .Settle) instead of full sweeps. Run both executors side by side on the same random
-		// input sequence and compare outputs, convergence, sweep counts and every gate's state.
+		// The feedback executor settles by evaluating only what changed (GateProgram.Settle)
+		// instead of full sweeps. Run both executors side by side on the same random input
+		// sequence and compare outputs, convergence, sweep counts and every gate's state.
 		[TestCaseSource(nameof(BundledProjects))]
 		public void SettlingMatchesFullSweeps(string project)
 		{
-			Assume.That(FeedbackJitCompiler.DynamicCodeAvailable, "needs a platform that can generate code to compare against");
 			int compared = 0;
 			foreach (SimChip root in AllCustomChips(CustomChipsOf(project, out ChipLibrary library)))
 			{
@@ -325,53 +264,48 @@ namespace DLS.Tests
 
 		static bool CompareExecutors(ChipDescription description, ChipLibrary library, Random random, bool expectNonConvergence = false)
 		{
-			SimChip nativeRoot = RewiredEngine.BuildChip(description, library);
-			CompiledFeedbackProgram nativeProgram = FeedbackJitCompiler.TryCompileStandalone(nativeRoot, description.Name);
-			if (nativeProgram == null) return false;
-			Assert.IsNull(nativeProgram.Interpreted);
+			// Each executor gets its own chip tree, built from the same description.
+			SimChip sweepRoot = RewiredEngine.BuildChip(description, library);
+			CompiledFeedbackProgram program = FeedbackJitCompiler.TryCompileStandalone(sweepRoot, description.Name);
+			if (program == null) return false;
 
-			SimChip interpretedRoot = RewiredEngine.BuildChip(description, library);
-			FeedbackJitCompiler.ForceInterpreter = true;
-			CompiledFeedbackProgram interpretedProgram = FeedbackJitCompiler.TryCompileStandalone(interpretedRoot, description.Name);
-			FeedbackJitCompiler.ForceInterpreter = false;
-			Assert.IsNotNull(interpretedProgram?.Interpreted, description.Name);
+			SimChip settleRoot = RewiredEngine.BuildChip(description, library);
+			CompiledFeedbackExecutor fullSweeps = program.CreateExecutor(sweepRoot, fullSweeps: true);
+			CompiledFeedbackExecutor settling = program.CreateExecutor(settleRoot);
+			fullSweeps.SynchronizeFromChipTree();
+			settling.SynchronizeFromChipTree();
 
-			CompiledFeedbackExecutor native = nativeProgram.CreateExecutor(nativeRoot);
-			CompiledFeedbackExecutor interpreted = interpretedProgram.CreateExecutor(interpretedRoot);
-			native.SynchronizeFromChipTree();
-			interpreted.SynchronizeFromChipTree();
-
-			List<SimPin> nativePins = PrimitiveOutputs(nativeRoot);
-			List<SimPin> interpretedPins = PrimitiveOutputs(interpretedRoot);
+			List<SimPin> sweepPins = PrimitiveOutputs(sweepRoot);
+			List<SimPin> settlePins = PrimitiveOutputs(settleRoot);
 			bool sawNonConvergence = false;
 
 			for (int step = 0; step < 200; step++)
 			{
-				for (int i = 0; i < nativeRoot.InputPins.Length; i++)
+				for (int i = 0; i < sweepRoot.InputPins.Length; i++)
 				{
 					// Mostly small changes, like a clock or one data bit, sometimes a new word.
-					uint value = nativeRoot.InputPins[i].State;
+					uint value = sweepRoot.InputPins[i].State;
 					int choice = random.Next(10);
 					if (choice < 4) value ^= 1u;
 					else if (choice < 6) value = (uint)random.Next(0, 256);
 					else if (choice == 6) value = (uint)random.Next() ^ ((uint)random.Next() << 16);
-					nativeRoot.InputPins[i].State = value;
-					interpretedRoot.InputPins[i].State = value;
+					sweepRoot.InputPins[i].State = value;
+					settleRoot.InputPins[i].State = value;
 				}
 
-				bool convergedA = native.Evaluate(nativeRoot, out uint[] outputsA, out int sweepsA);
-				bool convergedB = interpreted.Evaluate(interpretedRoot, out uint[] outputsB, out int sweepsB);
+				bool convergedA = fullSweeps.Evaluate(sweepRoot, out uint[] outputsA, out int sweepsA);
+				bool convergedB = settling.Evaluate(settleRoot, out uint[] outputsB, out int sweepsB);
 				string at = $"{description.Name}, step {step}";
 				Assert.AreEqual(convergedA, convergedB, at + ": convergence");
 				Assert.AreEqual(sweepsA, sweepsB, at + ": sweeps");
 				CollectionAssert.AreEqual(outputsA, outputsB, at + ": outputs");
 				sawNonConvergence |= !convergedA;
 
-				native.MaterializeState();
-				interpreted.MaterializeState();
-				for (int i = 0; i < nativePins.Count; i++)
+				fullSweeps.MaterializeState();
+				settling.MaterializeState();
+				for (int i = 0; i < sweepPins.Count; i++)
 				{
-					Assert.AreEqual(nativePins[i].State, interpretedPins[i].State, $"{at}: gate output {i}");
+					Assert.AreEqual(sweepPins[i].State, settlePins[i].State, $"{at}: gate output {i}");
 				}
 			}
 

@@ -1,26 +1,26 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using DLS.Description;
 using DLS.Game;
 
 namespace DLS.Simulation
 {
-	// Native accelerator for gate-feedback custom chips.
+	// Accelerator for gate-feedback custom chips.
 	//
-	// Unlike CombinationalJitCompiler this compiler deliberately accepts cycles. Each
-	// native sweep reads only the previous delta-cycle buffer and writes the next one,
-	// preserving the deterministic solver's simultaneous-update semantics. The normal
-	// deterministic engine still performs power-on settling; only after that fixed point
-	// is reached is the native executor synchronized and allowed to replace the expanded
-	// gate hierarchy.
+	// Unlike CombinationalJitCompiler this compiler deliberately accepts cycles. The chip
+	// becomes one GateProgram whose sweeps read only the previous delta-cycle state and
+	// write the next one, preserving the deterministic solver's simultaneous-update
+	// semantics. The executor settles it by evaluating only the operations whose inputs
+	// changed (GateProgram.Settle), on every platform: generated code that ran full sweeps
+	// was about half as fast on the example projects, because a sweep evaluated every gate
+	// although few change. The normal deterministic engine still performs power-on
+	// settling; only after that fixed point is reached is the executor synchronized and
+	// allowed to replace the expanded gate hierarchy.
 	public static class FeedbackJitCompiler
 	{
 		const uint DisconnectedState = 0xFFFF0000u;
-		const uint SingleBitMask = PinState.SingleBitMask;
-		const int NodesPerNativeMethod = 256;
 		const int MinPrimitiveNodeCount = 2;
 
 		// Every sweep evaluates the whole program and a deep circuit needs many sweeps before it
@@ -28,8 +28,6 @@ namespace DLS.Simulation
 		// Larger chips are not compiled as a whole; their smaller feedback subchips (registers,
 		// latches) still are. A 256-byte RAM built from registers ran 40x slower as one program.
 		internal const int MaxPrimitiveNodeCount = 1024;
-
-		internal delegate void NativeFeedbackBlock(uint[] current, uint[] next);
 
 		sealed class ProgramHolder
 		{
@@ -40,17 +38,6 @@ namespace DLS.Simulation
 		static readonly object programCacheLock = new();
 		static ConditionalWeakTable<ChipDescription, ProgramHolder> programs = new();
 
-		// False where the platform cannot generate code at run time and programs are interpreted
-		// instead: known up front for IL2CPP builds (Android, WebGL), otherwise found out when
-		// creating a DynamicMethod fails.
-#if ENABLE_IL2CPP && !UNITY_EDITOR
-		public static bool DynamicCodeAvailable { get; private set; } = false;
-#else
-		public static bool DynamicCodeAvailable { get; private set; } = true;
-#endif
-		// Run programs through the interpreter even where code can be generated (tests).
-		internal static bool ForceInterpreter;
-		public static bool Interpreting => ForceInterpreter || !DynamicCodeAvailable;
 		public static string LastFailureReason { get; private set; } = string.Empty;
 
 		internal static void NotifyDescriptionsChanged()
@@ -83,7 +70,7 @@ namespace DLS.Simulation
 		}
 
 		// Compiles a private program for one chip, outside the program cache. Null when the chip
-		// is not supported. Used by the tests that compare native and interpreted programs.
+		// is not supported. Used by the tests.
 		internal static CompiledFeedbackProgram TryCompileStandalone(SimChip root, string chipName)
 		{
 			try
@@ -209,36 +196,9 @@ namespace DLS.Simulation
 			SignalRef[] rootOutputs = new SignalRef[root.OutputPins.Length];
 			for (int i = 0; i < root.OutputPins.Length; i++) rootOutputs[i] = resolver.Resolve(root.OutputPins[i]);
 
-			List<NativeFeedbackBlock> blocks = new();
-			GateProgram interpreted = null;
-			if (!Interpreting)
-			{
-				try
-				{
-					for (int start = 0; start < nodes.Length; start += NodesPerNativeMethod)
-					{
-						int count = Math.Min(NodesPerNativeMethod, nodes.Length - start);
-						NativeFeedbackBlock block = EmitNativeBlock(nodes, start, count, chipName, blocks.Count);
-						if (block == null) return null;
-						blocks.Add(block);
-					}
-				}
-				catch (Exception e) when (IsCodeGenerationUnavailable(e))
-				{
-					DynamicCodeAvailable = false;
-					blocks.Clear();
-				}
-			}
-
-			if (Interpreting)
-			{
-				// Without generated code the whole program is one interpreted program, which
-				// the executor settles by evaluating only what changes (GateProgram.Settle).
-				GateProgram.Builder builder = new();
-				for (int i = 0; i < nodes.Length; i++) AddNode(builder, nodes[i]);
-				interpreted = builder.Build();
-				blocks.Add(interpreted.Run);
-			}
+			GateProgram.Builder builder = new();
+			for (int i = 0; i < nodes.Length; i++) AddNode(builder, nodes[i]);
+			GateProgram program = builder.Build();
 
 			int[] outputSlots = new int[rootOutputs.Length];
 			uint[] outputConstants = new uint[rootOutputs.Length];
@@ -250,8 +210,7 @@ namespace DLS.Simulation
 
 			timer.Stop();
 			return new CompiledFeedbackProgram(
-				blocks.ToArray(),
-				interpreted,
+				program,
 				nextScratchSlot,
 				root.InputPins.Length,
 				root.OutputPins.Length,
@@ -367,7 +326,7 @@ namespace DLS.Simulation
 				ChipType.BusTerminus_8Bit;
 		}
 
-		// The interpreted form of EmitNode: the same operations, see GateProgram.
+		// A primitive chip as GateProgram operations.
 		static void AddNode(GateProgram.Builder program, CompiledNode node)
 		{
 			switch (node.Type)
@@ -435,250 +394,6 @@ namespace DLS.Simulation
 
 		static GateProgram.Operand Operand(SignalRef signal) =>
 			signal.IsConstant ? GateProgram.Operand.FromConstant(signal.Constant) : GateProgram.Operand.FromSlot(signal.Slot);
-
-		// True for the errors a platform without run-time code generation (IL2CPP) gives when
-		// asked to create a DynamicMethod.
-		static bool IsCodeGenerationUnavailable(Exception e) =>
-			e is NotSupportedException or MissingMethodException or TypeLoadException or MemberAccessException;
-
-		static NativeFeedbackBlock EmitNativeBlock(
-			CompiledNode[] nodes,
-			int start,
-			int count,
-			string chipName,
-			int blockIndex)
-		{
-			string safeName = string.IsNullOrWhiteSpace(chipName) ? "Unnamed" : chipName.Replace(' ', '_');
-			DynamicMethod method = new(
-				$"DLS_FB_JIT_{safeName}_{blockIndex}",
-				typeof(void),
-				new[] { typeof(uint[]), typeof(uint[]) },
-				typeof(FeedbackJitCompiler).Module,
-				true);
-
-			ILGenerator il = method.GetILGenerator();
-			for (int i = 0; i < count; i++) EmitNode(il, nodes[start + i]);
-			il.Emit(OpCodes.Ret);
-			return (NativeFeedbackBlock)method.CreateDelegate(typeof(NativeFeedbackBlock));
-		}
-
-		static void EmitNode(ILGenerator il, CompiledNode node)
-		{
-			switch (node.Type)
-			{
-				case ChipType.Nand:
-					EmitStorePrefix(il, node.Outputs[0].Slot);
-					EmitLoadSignal(il, node.Inputs[0]);
-					EmitLoadSignal(il, node.Inputs[1]);
-					il.Emit(OpCodes.And);
-					EmitInt(il, 1);
-					il.Emit(OpCodes.Xor);
-					EmitInt(il, 1);
-					il.Emit(OpCodes.And);
-					il.Emit(OpCodes.Stelem_I4);
-					break;
-
-				case ChipType.TriStateBuffer:
-				{
-					Label disconnected = il.DefineLabel();
-					Label done = il.DefineLabel();
-
-					EmitStorePrefix(il, node.Outputs[0].Slot);
-					EmitLoadSignal(il, node.Inputs[1]);
-					EmitInt(il, 1);
-					il.Emit(OpCodes.And);
-					il.Emit(OpCodes.Brfalse, disconnected);
-					EmitLoadSignal(il, node.Inputs[0]);
-					il.Emit(OpCodes.Br, done);
-					il.MarkLabel(disconnected);
-					EmitUInt(il, DisconnectedState);
-					il.MarkLabel(done);
-					il.Emit(OpCodes.Stelem_I4);
-					break;
-				}
-
-				case ChipType.Split_4To1Bit:
-					EmitSplitBits(il, node, new[] { 3, 2, 1, 0 });
-					break;
-
-				case ChipType.Split_8To1Bit:
-					EmitSplitBits(il, node, new[] { 7, 6, 5, 4, 3, 2, 1, 0 });
-					break;
-
-				case ChipType.Merge_1To4Bit:
-					EmitMergeSingleBits(il, node, new[] { 3, 2, 1, 0 });
-					break;
-
-				case ChipType.Merge_1To8Bit:
-					EmitMergeSingleBits(il, node, new[] { 7, 6, 5, 4, 3, 2, 1, 0 });
-					break;
-
-				case ChipType.Merge_4To8Bit:
-					EmitMerge4To8(il, node);
-					break;
-
-				case ChipType.Split_8To4Bit:
-					EmitSplit8To4(il, node);
-					break;
-
-				case ChipType.Bus_1Bit:
-				case ChipType.Bus_4Bit:
-				case ChipType.Bus_8Bit:
-					EmitStorePrefix(il, node.Outputs[0].Slot);
-					EmitLoadSignal(il, node.Inputs[0]);
-					il.Emit(OpCodes.Stelem_I4);
-					break;
-
-				case ChipType.BusTerminus_1Bit:
-				case ChipType.BusTerminus_4Bit:
-				case ChipType.BusTerminus_8Bit:
-					break;
-
-				default:
-					throw new NotSupportedException("Unsupported feedback JIT primitive: " + node.Type);
-			}
-		}
-
-		static void EmitSplitBits(ILGenerator il, CompiledNode node, int[] shifts)
-		{
-			for (int i = 0; i < shifts.Length; i++)
-			{
-				EmitStorePrefix(il, node.Outputs[i].Slot);
-				EmitLoadSignal(il, node.Inputs[0]);
-				if (shifts[i] != 0)
-				{
-					EmitInt(il, shifts[i]);
-					il.Emit(OpCodes.Shr_Un);
-				}
-				EmitUInt(il, SingleBitMask);
-				il.Emit(OpCodes.And);
-				il.Emit(OpCodes.Stelem_I4);
-			}
-		}
-
-		static void EmitMergeSingleBits(ILGenerator il, CompiledNode node, int[] inputIndices)
-		{
-			EmitStorePrefix(il, node.Outputs[0].Slot);
-			for (int bit = 0; bit < inputIndices.Length; bit++)
-			{
-				EmitLoadSignal(il, node.Inputs[inputIndices[bit]]);
-				EmitUInt(il, SingleBitMask);
-				il.Emit(OpCodes.And);
-				if (bit != 0)
-				{
-					EmitInt(il, bit);
-					il.Emit(OpCodes.Shl);
-					il.Emit(OpCodes.Or);
-				}
-			}
-			il.Emit(OpCodes.Stelem_I4);
-		}
-
-		static void EmitMerge4To8(ILGenerator il, CompiledNode node)
-		{
-			EmitStorePrefix(il, node.Outputs[0].Slot);
-
-			EmitLoadSignal(il, node.Inputs[1]);
-			EmitInt(il, 0xFFFF);
-			il.Emit(OpCodes.And);
-			EmitLoadSignal(il, node.Inputs[0]);
-			EmitInt(il, 0xFFFF);
-			il.Emit(OpCodes.And);
-			EmitInt(il, 4);
-			il.Emit(OpCodes.Shl);
-			il.Emit(OpCodes.Or);
-			EmitInt(il, 0xFFFF);
-			il.Emit(OpCodes.And);
-
-			EmitLoadSignal(il, node.Inputs[1]);
-			EmitInt(il, 16);
-			il.Emit(OpCodes.Shr_Un);
-			EmitInt(il, 0xF);
-			il.Emit(OpCodes.And);
-			EmitLoadSignal(il, node.Inputs[0]);
-			EmitInt(il, 16);
-			il.Emit(OpCodes.Shr_Un);
-			EmitInt(il, 0xF);
-			il.Emit(OpCodes.And);
-			EmitInt(il, 4);
-			il.Emit(OpCodes.Shl);
-			il.Emit(OpCodes.Or);
-			EmitInt(il, 16);
-			il.Emit(OpCodes.Shl);
-			il.Emit(OpCodes.Or);
-			il.Emit(OpCodes.Stelem_I4);
-		}
-
-		static void EmitSplit8To4(ILGenerator il, CompiledNode node)
-		{
-			EmitSplitNibble(il, node.Outputs[0].Slot, node.Inputs[0], 4);
-			EmitSplitNibble(il, node.Outputs[1].Slot, node.Inputs[0], 0);
-		}
-
-		static void EmitSplitNibble(ILGenerator il, int outputSlot, SignalRef input, int shift)
-		{
-			EmitStorePrefix(il, outputSlot);
-			EmitLoadSignal(il, input);
-			if (shift != 0)
-			{
-				EmitInt(il, shift);
-				il.Emit(OpCodes.Shr_Un);
-			}
-			EmitInt(il, 0xF);
-			il.Emit(OpCodes.And);
-
-			EmitLoadSignal(il, input);
-			EmitInt(il, 16 + shift);
-			il.Emit(OpCodes.Shr_Un);
-			EmitInt(il, 0xF);
-			il.Emit(OpCodes.And);
-			EmitInt(il, 16);
-			il.Emit(OpCodes.Shl);
-			il.Emit(OpCodes.Or);
-			il.Emit(OpCodes.Stelem_I4);
-		}
-
-		static void EmitStorePrefix(ILGenerator il, int slot)
-		{
-			il.Emit(OpCodes.Ldarg_1);
-			EmitInt(il, slot);
-		}
-
-		static void EmitLoadSignal(ILGenerator il, SignalRef signal)
-		{
-			if (signal.IsConstant)
-			{
-				EmitUInt(il, signal.Constant);
-				return;
-			}
-
-			il.Emit(OpCodes.Ldarg_0);
-			EmitInt(il, signal.Slot);
-			il.Emit(OpCodes.Ldelem_U4);
-		}
-
-		static void EmitUInt(ILGenerator il, uint value) => EmitInt(il, unchecked((int)value));
-
-		static void EmitInt(ILGenerator il, int value)
-		{
-			switch (value)
-			{
-				case -1: il.Emit(OpCodes.Ldc_I4_M1); break;
-				case 0: il.Emit(OpCodes.Ldc_I4_0); break;
-				case 1: il.Emit(OpCodes.Ldc_I4_1); break;
-				case 2: il.Emit(OpCodes.Ldc_I4_2); break;
-				case 3: il.Emit(OpCodes.Ldc_I4_3); break;
-				case 4: il.Emit(OpCodes.Ldc_I4_4); break;
-				case 5: il.Emit(OpCodes.Ldc_I4_5); break;
-				case 6: il.Emit(OpCodes.Ldc_I4_6); break;
-				case 7: il.Emit(OpCodes.Ldc_I4_7); break;
-				case 8: il.Emit(OpCodes.Ldc_I4_8); break;
-				default:
-					if (value >= sbyte.MinValue && value <= sbyte.MaxValue) il.Emit(OpCodes.Ldc_I4_S, (sbyte)value);
-					else il.Emit(OpCodes.Ldc_I4, value);
-					break;
-			}
-		}
 
 		readonly struct SignalRef
 		{
@@ -773,7 +488,6 @@ namespace DLS.Simulation
 
 	internal sealed class CompiledFeedbackProgram
 	{
-		readonly FeedbackJitCompiler.NativeFeedbackBlock[] blocks;
 		readonly int[] outputSlots;
 		readonly uint[] outputConstants;
 
@@ -784,12 +498,10 @@ namespace DLS.Simulation
 		public readonly int PrimitiveOutputCount;
 		public readonly double CompileMilliseconds;
 
-		// Set when the program runs on the interpreter instead of generated code.
-		public readonly GateProgram Interpreted;
+		public readonly GateProgram Program;
 
 		public CompiledFeedbackProgram(
-			FeedbackJitCompiler.NativeFeedbackBlock[] blocks,
-			GateProgram interpreted,
+			GateProgram program,
 			int scratchCount,
 			int inputCount,
 			int outputCount,
@@ -799,8 +511,7 @@ namespace DLS.Simulation
 			int primitiveOutputCount,
 			double compileMilliseconds)
 		{
-			this.blocks = blocks;
-			Interpreted = interpreted;
+			Program = program;
 			this.outputSlots = outputSlots;
 			this.outputConstants = outputConstants;
 			ScratchCount = scratchCount;
@@ -813,7 +524,7 @@ namespace DLS.Simulation
 
 		public void RunSweep(uint[] current, uint[] next)
 		{
-			for (int i = 0; i < blocks.Length; i++) blocks[i](current, next);
+			Program.Run(current, next);
 		}
 
 		public void WriteOutputs(uint[] current, uint[] outputs)
@@ -825,12 +536,14 @@ namespace DLS.Simulation
 			}
 		}
 
-		public CompiledFeedbackExecutor CreateExecutor(SimChip root)
+		// fullSweeps: evaluate every operation in every sweep instead of settling only what
+		// changes. Same results, slower; the tests compare Settle against it.
+		public CompiledFeedbackExecutor CreateExecutor(SimChip root, bool fullSweeps = false)
 		{
 			List<SimPin> primitiveOutputs = new(PrimitiveOutputCount);
 			CollectPrimitiveOutputs(root, primitiveOutputs);
 			if (primitiveOutputs.Count != PrimitiveOutputCount) return null;
-			return new CompiledFeedbackExecutor(this, primitiveOutputs.ToArray());
+			return new CompiledFeedbackExecutor(this, primitiveOutputs.ToArray(), fullSweeps);
 		}
 
 		static void CollectPrimitiveOutputs(SimChip chip, List<SimPin> outputs)
@@ -876,8 +589,8 @@ namespace DLS.Simulation
 		readonly uint[] lastStableInputs;
 		bool hasStableInputSnapshot;
 		bool disabled;
-		// Interpreted programs only: the bookkeeping of GateProgram.Settle, and whether current
-		// is a settled state that Settle may start from (else every operation is evaluated once).
+		// The bookkeeping of GateProgram.Settle (null for full sweeps), and whether current is a
+		// settled state that Settle may start from (else every operation is evaluated once).
 		readonly GateProgram.SettleState settleState;
 		bool settled;
 
@@ -888,7 +601,7 @@ namespace DLS.Simulation
 		public double CompileMilliseconds => program.CompileMilliseconds;
 		public int LastSweepCount { get; private set; }
 
-		public CompiledFeedbackExecutor(CompiledFeedbackProgram program, SimPin[] primitiveOutputPins)
+		public CompiledFeedbackExecutor(CompiledFeedbackProgram program, SimPin[] primitiveOutputPins, bool fullSweeps = false)
 		{
 			this.program = program;
 			this.primitiveOutputPins = primitiveOutputPins;
@@ -896,7 +609,7 @@ namespace DLS.Simulation
 			next = new uint[program.ScratchCount];
 			outputs = new uint[program.OutputCount];
 			lastStableInputs = new uint[program.InputCount];
-			if (program.Interpreted != null) settleState = new GateProgram.SettleState(program.Interpreted);
+			if (!fullSweeps) settleState = new GateProgram.SettleState(program.Program);
 		}
 
 		public void SynchronizeFromChipTree()
@@ -971,20 +684,20 @@ namespace DLS.Simulation
 			int maxSweeps = Math.Max(256, program.PrimitiveNodeCount + 64);
 			bool converged = false;
 
-			GateProgram interpreted = program.Interpreted;
-			if (interpreted != null)
+			if (settleState != null)
 			{
-				// Same result as the sweeps below; see GateProgram.Settle.
-				if (!settled) interpreted.MarkAll(settleState);
+				// Same result as the full sweeps below; see GateProgram.Settle.
+				GateProgram gates = program.Program;
+				if (!settled) gates.MarkAll(settleState);
 				for (int i = 0; i < inputCount; i++)
 				{
 					uint state = chip.InputPins[i].State;
-					if (current[i] != state) interpreted.MarkReaders(settleState, i);
+					if (current[i] != state) gates.MarkReaders(settleState, i);
 					current[i] = state;
 				}
 
 				// Settle works in current alone; next is only used by the full-sweep loop.
-				sweepCount = interpreted.Settle(current, settleState, maxSweeps, out converged);
+				sweepCount = gates.Settle(current, settleState, maxSweeps, out converged);
 				settled = converged;
 			}
 			else
@@ -997,7 +710,7 @@ namespace DLS.Simulation
 				}
 			}
 
-			for (int sweep = 0; interpreted == null && sweep < maxSweeps; sweep++)
+			for (int sweep = 0; settleState == null && sweep < maxSweeps; sweep++)
 			{
 				for (int i = 0; i < inputCount; i++) next[i] = current[i];
 				program.RunSweep(current, next);

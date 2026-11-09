@@ -133,7 +133,6 @@ namespace DLS.Benchmarks
 			{
 				bool interpret = mode == "Interpreted";
 				CombinationalJitCompiler.ForceInterpreter = interpret;
-				FeedbackJitCompiler.ForceInterpreter = interpret;
 				CombinationalJitCompiler.NotifyDescriptionsChanged();
 				FeedbackJitCompiler.NotifyDescriptionsChanged();
 				try
@@ -157,7 +156,6 @@ namespace DLS.Benchmarks
 				finally
 				{
 					CombinationalJitCompiler.ForceInterpreter = EngineSetup.InterpreterForced;
-					FeedbackJitCompiler.ForceInterpreter = EngineSetup.InterpreterForced;
 					CombinationalJitCompiler.NotifyDescriptionsChanged();
 					FeedbackJitCompiler.NotifyDescriptionsChanged();
 					RewiredEngine.Reset();
