@@ -8,11 +8,12 @@ namespace DLS.Simulation
 	// small interpreter instead of as generated machine code.
 	//
 	// Both compilers turn a custom chip into a list of primitive operations over slots of a
-	// uint array and then emit that list as IL with DynamicMethod. IL2CPP (Android, WebGL) and
-	// other ahead-of-time platforms cannot create code at run time, so there the compilers
-	// build a GateProgram from the same list instead. Every operation below is a line-by-line
-	// copy of what the emitted IL computes, so both forms give bit-identical results; the
-	// engine tests run every accelerated circuit through both and compare them.
+	// uint array. The combinational compiler emits that list as IL with DynamicMethod where it
+	// can; IL2CPP (Android, WebGL) and other ahead-of-time platforms cannot create code at run
+	// time, so there it builds a GateProgram from the same list instead. Every operation below
+	// is a line-by-line copy of what the emitted IL computes, so both forms give bit-identical
+	// results; the engine tests run every combinational program through both and compare them.
+	// Feedback programs always run here, settled by Settle, which evaluates only what changes.
 	//
 	// A program reads its inputs from one array and writes its results to another. The
 	// combinational compiler passes the same array twice and orders the operations
