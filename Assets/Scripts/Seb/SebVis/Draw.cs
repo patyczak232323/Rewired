@@ -48,6 +48,7 @@ namespace Seb.Vis
 		public static void Text(FontType font, string text, float fontSize, Vector2 pos, Anchor anchor, Color col, float lineSpacing = 1)
 		{
 			if (fontSize <= 0 || col.a == 0 || string.IsNullOrEmpty(text)) return;
+			if (shapeSink == ShapeSink.Capture) return; // text is never captured
 
 			FontData fontData = defaultFontsData[(int)font];
 			TextDrawData data = new(fontData, text, fontSize, lineSpacing, pos, anchor, col, activeMaskMin, activeMaskMax);
@@ -57,6 +58,7 @@ namespace Seb.Vis
 		public static void Text(FontType font, char[] text, int textLength, float fontSize, Vector2 pos, Anchor anchor, Color col, float lineSpacing = 1)
 		{
 			if (fontSize <= 0 || col.a == 0 || text == null || text.Length == 0 || textLength == 0) return;
+			if (shapeSink == ShapeSink.Capture) return; // text is never captured
 
 			FontData fontData = defaultFontsData[(int)font];
 			TextDrawData data = new(fontData, text, textLength, fontSize, lineSpacing, pos, anchor, col, activeMaskMin, activeMaskMax);
@@ -68,7 +70,7 @@ namespace Seb.Vis
 			if (col.a == 0) return;
 
 			ShapeData data = ShapeData.CreateTriangle(a, b, c, col);
-			shapeDrawer.AddToLayer(data);
+			AddShape(data);
 		}
 
 		public static void Triangle(Vector2 centre, Vector2 dir, float height, float scale, Color col)
@@ -81,7 +83,7 @@ namespace Seb.Vis
 			Vector2 bottom = centre - (dir - perp * height) * scale;
 
 			ShapeData data = ShapeData.CreateTriangle(tip, top, bottom, col);
-			shapeDrawer.AddToLayer(data);
+			AddShape(data);
 		}
 
 		public static void Diamond(Vector2 pos, Vector2 size, Color col)
@@ -89,7 +91,7 @@ namespace Seb.Vis
 			if (size.x == 0 || size.y == 0 || col.a == 0) return;
 
 			ShapeData data = ShapeData.CreateDiamond(pos, size, col, activeMaskMin, activeMaskMax);
-			shapeDrawer.AddToLayer(data);
+			AddShape(data);
 		}
 
 		public static void SatValQuad(Vector2 centre, Vector2 size, float hue)
@@ -97,7 +99,7 @@ namespace Seb.Vis
 			if (size.x == 0 || size.y == 0) return;
 
 			ShapeData data = ShapeData.CreateSatVal(centre, size, hue, activeMaskMin, activeMaskMax);
-			shapeDrawer.AddToLayer(data);
+			AddShape(data);
 		}
 
 		public static void HueQuad(Vector2 centre, Vector2 size)
@@ -105,7 +107,7 @@ namespace Seb.Vis
 			if (size.x == 0 || size.y == 0) return;
 
 			ShapeData data = ShapeData.CreateHueQuad(centre, size, activeMaskMin, activeMaskMax);
-			shapeDrawer.AddToLayer(data);
+			AddShape(data);
 		}
 
 		public static void Point(Vector2 centre, float radius, Color col)
@@ -113,7 +115,7 @@ namespace Seb.Vis
 			if (radius == 0 || col.a == 0) return;
 
 			ShapeData data = ShapeData.CreatePoint(centre, Vector2.one * radius, col, activeMaskMin, activeMaskMax);
-			shapeDrawer.AddToLayer(data);
+			AddShape(data);
 		}
 
 		public static void PointOutline(Vector2 centre, float radius, float thickness, Color col)
@@ -121,7 +123,7 @@ namespace Seb.Vis
 			if (radius == 0 || thickness == 0 || col.a == 0) return;
 
 			ShapeData data = ShapeData.CreatePointOutline(centre, radius, thickness, col, activeMaskMin, activeMaskMax);
-			shapeDrawer.AddToLayer(data);
+			AddShape(data);
 		}
 
 		public static void Ellipse(Vector2 centre, Vector2 size, Color col)
@@ -129,12 +131,13 @@ namespace Seb.Vis
 			if (size.x == 0 || size.y == 0 || col.a == 0) return;
 
 			ShapeData data = ShapeData.CreatePoint(centre, size, col, activeMaskMin, activeMaskMax);
-			shapeDrawer.AddToLayer(data);
+			AddShape(data);
 		}
 
 		public static void ShapeBatch(ShapeData[] shapes)
 		{
-			shapeDrawer.AddToLayer(shapes);
+			if (shapeSink == ShapeSink.Draw) shapeDrawer.AddToLayer(shapes);
+			else if (shapeSink == ShapeSink.Capture) captureList.AddRange(shapes);
 		}
 
 		public static void Quad(Vector2 centre, Vector2 size, Color col)
@@ -142,7 +145,7 @@ namespace Seb.Vis
 			if (size.x == 0 || size.y == 0 || col.a == 0) return;
 
 			ShapeData data = ShapeData.CreateQuad(centre, size, col, activeMaskMin, activeMaskMax);
-			shapeDrawer.AddToLayer(data);
+			AddShape(data);
 		}
 
 		public static void Line(Vector2 a, Vector2 b, float thickness, Color col, float t = 1)
@@ -151,7 +154,7 @@ namespace Seb.Vis
 
 			if (t < 1) b = Vector2.Lerp(a, b, t);
 			ShapeData data = ShapeData.CreateLine(a, b, thickness, col, activeMaskMin, activeMaskMax);
-			shapeDrawer.AddToLayer(data);
+			AddShape(data);
 		}
 
 		// ------ Composite Draw Functions ------

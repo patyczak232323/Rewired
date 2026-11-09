@@ -89,11 +89,13 @@ namespace Seb.Vis
 			for (int i = 0; i < layers.Count; i++)
 			{
 				//Debug.Log($"Frame {Time.frameCount} Layer {i} Draw shapes then text");
+				if (cachedDraws.Count > 0) DrawCachedForLayer(cmd, i);
 				shapeDrawer.DrawNextLayer(cmd);
 				textDrawer.DrawNextLayer(cmd);
 			}
 
 			layers.Clear();
+			cachedDraws.Clear();
 		}
 
 		// Called for each active camera
@@ -151,6 +153,9 @@ namespace Seb.Vis
 			shapeDrawer = null;
 			textDrawer = null;
 			layers.Clear();
+			cachedDraws.Clear();
+			shapeSink = ShapeSink.Draw;
+			captureList = null;
 			OnDraw = null;
 
 			static void ReleaseDrawer<T>(Drawer<T> drawer) where T : struct

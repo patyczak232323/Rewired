@@ -31,6 +31,7 @@ namespace DLS.Graphics
 		static readonly string[] SettingsWheelFullScreenOptions = { "OFF", "MAXIMIZED", "BORDERLESS", "EXCLUSIVE" };
 		static readonly FullScreenMode[] FullScreenModes = { FullScreenMode.Windowed, FullScreenMode.MaximizedWindow, FullScreenMode.FullScreenWindow, FullScreenMode.ExclusiveFullScreen };
 		static readonly string[] SettingsWheelVSyncOptions = { "DISABLED", "ENABLED" };
+		static readonly string[] SettingsWheelRenderingOptions = { "STANDARD", "GPU (BETA)" };
 
 		static readonly Func<string, bool> projectNameValidator = ProjectNameValidator;
 		static readonly UI.ScrollViewDrawContentFunc loadProjectScrollViewDrawer = DrawAllProjectsInScrollView;
@@ -502,6 +503,13 @@ namespace DLS.Graphics
 				UI.DrawText("VSync", theme.FontRegular, theme.FontSizeRegular, pos, Anchor.CentreLeft, Color.white);
 				int vsyncSetting = UI.WheelSelector(EditedAppSettings.VSyncEnabled ? 1 : 0, SettingsWheelVSyncOptions, new Vector2(elementOriginRight, pos.y), wheelSize, theme.OptionsWheel, Anchor.CentreRight);
 				EditedAppSettings.VSyncEnabled = vsyncSetting == 1;
+
+				// -- Rendering (experimental GPU cache; not available where shapes are drawn from meshes, e.g. the browser) --
+				pos += Vector2.down * 4;
+				bool gpuAvailable = Draw.SupportsCachedShapes;
+				UI.DrawText("Rendering", theme.FontRegular, theme.FontSizeRegular, pos, Anchor.CentreLeft, Color.white);
+				int renderingSetting = UI.WheelSelector(EditedAppSettings.GpuRendering && gpuAvailable ? 1 : 0, SettingsWheelRenderingOptions, new Vector2(elementOriginRight, pos.y), wheelSize, theme.OptionsWheel, Anchor.CentreRight, enabled: gpuAvailable);
+				if (gpuAvailable) EditedAppSettings.GpuRendering = renderingSetting == 1;
 
 				// -- Updates --
 				pos += Vector2.down * 4;
