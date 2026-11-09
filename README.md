@@ -217,7 +217,7 @@ Release builds run on GitHub Actions on self-hosted runners (`Tools/SelfHostedRu
 - `pages.yml` publishes the website in `site/` to GitHub Pages, with the browser build from the latest release under `play/`. It runs after every release and when `site/` changes.
 - For a release: bump the version in `VERSION`, `Main.RewiredVersion` and `bundleVersion` in `ProjectSettings/ProjectSettings.asset`, merge to `main` and run `release.yml` (or push a `v*` tag matching `VERSION`).
 
-Current version: 0.8.0.
+Current version: 0.8.1.
 
 ## Status
 
