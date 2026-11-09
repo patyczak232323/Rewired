@@ -164,6 +164,9 @@ namespace DLS.Game
 				CreationTime = DateTime.Now,
 				Prefs_ChipPinNamesDisplayMode = PreferencesMenu.DisplayMode_OnHover,
 				Prefs_MainPinNamesDisplayMode = PreferencesMenu.DisplayMode_OnHover,
+				// New projects start with the grid shown and parts snapping to it.
+				Prefs_GridDisplayMode = 1,
+				Prefs_Snapping = PreferencesMenu.Snapping_IfGridShown,
 				Prefs_SimStepsPerClockTick = 250,
 				Prefs_SimTargetStepsPerSecond = SimulationSpeed.SharedTarget(ActiveAppSettings, 250),
 				Prefs_SimOwnClockSpeed = false,
