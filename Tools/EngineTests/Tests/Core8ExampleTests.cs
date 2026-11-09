@@ -377,6 +377,7 @@ namespace DLS.Tests
 				Prefs_ChipPinNamesDisplayMode = 1,
 				Prefs_SimTargetStepsPerSecond = 20,
 				Prefs_SimStepsPerClockTick = 1,
+				Prefs_SimOwnClockSpeed = true, // an example runs at its own speed, not the one set for all projects
 				AllCustomChipNames = chips.Select(c => c.Name).ToArray(),
 				StarredList = BuiltinCollectionCreator.GetDefaultStarredList().ToList(),
 				ChipCollections = BuiltinCollectionCreator.CreateDefaultChipCollections()

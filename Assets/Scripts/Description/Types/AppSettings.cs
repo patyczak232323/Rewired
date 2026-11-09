@@ -103,6 +103,11 @@ namespace DLS.Description
 		// Rewired asks GitHub for a newer release when it starts, unless this is set.
 		public bool DisableUpdateCheck;
 
+		// The clock speed every project runs at unless it has its own (SimulationSpeed).
+		// 0 means not set yet: the default.
+		public double SimClockHz;
+		public bool SimClockMax;
+
 		public static AppSettings Default() =>
 			new()
 			{
