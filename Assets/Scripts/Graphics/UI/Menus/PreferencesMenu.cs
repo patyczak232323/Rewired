@@ -18,6 +18,11 @@ namespace DLS.Graphics
 		public const int DisplayMode_OnHover = 1;
 		public const int DisplayMode_TabToggle = 2;
 
+		// Prefs_Snapping values, in the order of SnappingOptions.
+		public const int Snapping_HoldCtrl = 0;
+		public const int Snapping_IfGridShown = 1;
+		public const int Snapping_Always = 2;
+
 		static readonly string[] PinDisplayOptions =
 		{
 			"Always",

@@ -38,6 +38,15 @@ namespace DLS.Graphics
 		static float railScroll;
 		static float itemScroll;
 
+		// Animation: the highlight glides to the selected category (in rows, NaN until the first
+		// frame), and the chips of a newly selected category slide in one after another.
+		const float SlideSeconds = 0.18f;
+		const float SlideStagger = 0.025f;
+		const float SlideDistance = 2.5f;
+		static float highlightRow = float.NaN;
+		static string shownCategory;
+		static float shownSince;
+
 		static Region pressRegion;
 		static Vector2 pressStart;
 		static float scrollAtPress;
@@ -53,6 +62,8 @@ namespace DLS.Graphics
 		public static void Reset()
 		{
 			selectedCategory = null;
+			shownCategory = null;
+			highlightRow = float.NaN;
 			railScroll = itemScroll = 0;
 			pressRegion = Region.None;
 			dragPlacing = false;
@@ -102,17 +113,31 @@ namespace DLS.Graphics
 			float contentHeight = categories.Count * (RowHeight + RowGap);
 			railScroll = Mathf.Clamp(railScroll, 0, Mathf.Max(0, contentHeight - rail.height));
 
+			// The highlight moves most of the way to the selected row within a few frames.
+			int selectedRow = Mathf.Max(0, categories.IndexOf(selectedCategory));
+			if (float.IsNaN(highlightRow)) highlightRow = selectedRow;
+			highlightRow = Mathf.Lerp(highlightRow, selectedRow, 1 - Mathf.Exp(-Mathf.Min(Time.unscaledDeltaTime, 0.1f) * 18f));
+			if (Mathf.Abs(highlightRow - selectedRow) < 0.002f) highlightRow = selectedRow;
+
 			using (UI.CreateMaskScopeMinMax(rail.min, rail.max))
 			{
 				float y = rail.yMax + railScroll;
 				foreach (string category in categories)
 				{
+					UI.DrawPanel(new Vector2(rail.xMin, y), new Vector2(rail.width, RowHeight), MobileTheme.Quiet.buttonCols.normal, Anchor.TopLeft);
+					y -= RowHeight + RowGap;
+				}
+
+				float highlightTop = rail.yMax + railScroll - highlightRow * (RowHeight + RowGap);
+				UI.DrawPanel(new Vector2(rail.xMin, highlightTop), new Vector2(rail.width, RowHeight), MobileTheme.Primary.buttonCols.normal, Anchor.TopLeft);
+
+				y = rail.yMax + railScroll;
+				foreach (string category in categories)
+				{
 					bool selected = category == selectedCategory;
-					ButtonTheme theme = selected ? MobileTheme.Primary : MobileTheme.Quiet;
-					UI.DrawPanel(new Vector2(rail.xMin, y), new Vector2(rail.width, RowHeight), theme.buttonCols.normal, Anchor.TopLeft);
-					Bounds2D row = UI.PrevBounds;
+					Vector2 centreLeft = new(rail.xMin, y - RowHeight / 2);
 					string label = MobileTheme.Fit(DisplayName(category), rail.width - 1f, 0.6f, true);
-					MobileTheme.Text(label, row.CentreLeft + Vector2.right * 0.6f, 0.6f, selected ? Color.white : MobileTheme.SecondaryTextCol, Anchor.TextCentreLeft, true);
+					MobileTheme.Text(label, centreLeft + Vector2.right * 0.6f, 0.6f, selected ? Color.white : MobileTheme.SecondaryTextCol, Anchor.TextCentreLeft, true);
 					y -= RowHeight + RowGap;
 				}
 			}
@@ -143,12 +168,23 @@ namespace DLS.Graphics
 				return;
 			}
 
+			// A newly selected category's chips slide in from the right, one after another
+			// (the first category shown just appears).
+			if (shownCategory != selectedCategory)
+			{
+				shownSince = shownCategory == null ? float.NegativeInfinity : Time.unscaledTime;
+				shownCategory = selectedCategory;
+			}
+
 			using (UI.CreateMaskScopeMinMax(area.min, area.max))
 			{
 				float y = area.yMax + itemScroll;
-				foreach (string name in items)
+				for (int i = 0; i < items.Count; i++)
 				{
-					DrawItem(project, name, new Vector2(area.xMin, y), area.width);
+					float progress = Mathf.Clamp01((Time.unscaledTime - shownSince - Mathf.Min(i, 8) * SlideStagger) / SlideSeconds);
+					float slide = 1 - progress;
+					float x = area.xMin + slide * slide * slide * SlideDistance;
+					DrawItem(project, items[i], new Vector2(x, y), area.width);
 					y -= ItemHeight + ItemGap;
 				}
 			}
