@@ -506,7 +506,7 @@ namespace DLS.Graphics
 
 				// -- Rendering (experimental GPU cache; not available where shapes are drawn from meshes, e.g. the browser) --
 				pos += Vector2.down * 4;
-				bool gpuAvailable = Draw.SupportsCachedShapes;
+				bool gpuAvailable = Seb.Vis.Draw.SupportsCachedShapes; // the class: MainMenu has a Draw() method of its own
 				UI.DrawText("Rendering", theme.FontRegular, theme.FontSizeRegular, pos, Anchor.CentreLeft, Color.white);
 				int renderingSetting = UI.WheelSelector(EditedAppSettings.GpuRendering && gpuAvailable ? 1 : 0, SettingsWheelRenderingOptions, new Vector2(elementOriginRight, pos.y), wheelSize, theme.OptionsWheel, Anchor.CentreRight, enabled: gpuAvailable);
 				if (gpuAvailable) EditedAppSettings.GpuRendering = renderingSetting == 1;
