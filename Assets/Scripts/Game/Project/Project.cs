@@ -385,6 +385,66 @@ namespace DLS.Game
 
 		public bool ActiveChipHasUnsavedChanges() => HasUnsavedChanges(ViewedChip, chipLibrary);
 
+		// A cheap hash of everything DescriptionCreator.CreateChipDescription saves from the chip
+		// (plus the saved description it is compared with). When it has not changed, the result of
+		// the full comparison, which serializes the whole chip, has not changed either.
+		public int ViewedChipEditFingerprint()
+		{
+			DevChipInstance chip = ViewedChip;
+			HashCode hash = new();
+			hash.Add(chip);
+			hash.Add(chip.LastSavedDescription);
+			hash.Add(chip.Elements.Count);
+			hash.Add(chip.Wires.Count);
+
+			foreach (IMoveable element in chip.Elements)
+			{
+				if (element is DevPinInstance devPin)
+				{
+					hash.Add(devPin.ID);
+					hash.Add(devPin.Position);
+					hash.Add(devPin.IsInputPin);
+					hash.Add(devPin.Pin.Name);
+					hash.Add(devPin.Pin.bitCount);
+					hash.Add(devPin.Pin.Colour);
+					hash.Add(devPin.pinValueDisplayMode);
+				}
+				else if (element is SubChipInstance subchip)
+				{
+					hash.Add(subchip.ID);
+					hash.Add(subchip.Position);
+					hash.Add(subchip.Description.Name);
+					hash.Add(subchip.Label);
+					hash.Add(subchip.MirrorX);
+					hash.Add(subchip.MirrorY);
+					if (subchip.InternalData != null)
+					{
+						foreach (uint word in subchip.InternalData) hash.Add(word);
+					}
+
+					if (!subchip.IsBus)
+					{
+						foreach (PinInstance pin in subchip.OutputPins) hash.Add(pin.Colour);
+					}
+				}
+			}
+
+			foreach (WireInstance wire in chip.Wires)
+			{
+				hash.Add(wire.SourcePin?.Address.PinOwnerID);
+				hash.Add(wire.SourcePin?.Address.PinID);
+				hash.Add(wire.TargetPin?.Address.PinOwnerID);
+				hash.Add(wire.TargetPin?.Address.PinID);
+				hash.Add(wire.ConnectedWire);
+				hash.Add(wire.SourceConnectionInfo.wireConnectionSegmentIndex);
+				hash.Add(wire.TargetConnectionInfo.wireConnectionSegmentIndex);
+				hash.Add(wire.WirePointCount);
+				for (int i = 0; i < wire.WirePointCount; i++) hash.Add(wire.GetWirePoint(i));
+			}
+
+			return hash.ToHashCode();
+		}
+
 		// Compares a chip with its saved description, as the editor would describe that description:
 		// with the editor's pin colours and at least the size its pins and name need.
 		public static bool HasUnsavedChanges(DevChipInstance chip, ChipLibrary library)
