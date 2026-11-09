@@ -57,6 +57,16 @@ namespace DLS.Graphics
 			"Paused"
 		};
 
+		// Whether the clock speed is the one set for all projects or this project's own.
+		static readonly string[] ClockScopeOptions =
+		{
+			"All Projects",
+			"This Project"
+		};
+
+		const int ClockScope_AllProjects = 0;
+		const int ClockScope_ThisProject = 1;
+
 		static readonly Vector2 entrySize = new(menuWidth, DrawSettings.SelectorWheelHeight);
 		public static readonly Vector2 settingFieldSize = new(entrySize.x / 3, entrySize.y);
 
@@ -68,6 +78,7 @@ namespace DLS.Graphics
 		static readonly UIHandle ID_StraightWires = new("PREFS_StraightWires");
 		static readonly UIHandle ID_SimStatus = new("PREFS_SimStatus");
 		static readonly UIHandle ID_SimFrequencyField = new("PREFS_SimTickTarget");
+		static readonly UIHandle ID_SimClockScope = new("PREFS_SimClockScope");
 
 		static string showGridLabel => "Show grid" + CreateShortcutString(KeyboardShortcuts.GetBindingDisplayString(ShortcutAction.ToggleGrid));
 		static string simStatusLabel => "Sim Status" + CreateShortcutString(KeyboardShortcuts.GetBindingDisplayString(ShortcutAction.SimulationPause));
@@ -77,6 +88,7 @@ namespace DLS.Graphics
 		// never rounds the stored step rate.
 		static string clockTextFromProject = string.Empty;
 		static int clockTargetFromProject;
+		static int clockScopeShown;
 
 		static double simAvgTicksPerSec_delayedRefreshForUI;
 		static float lastSimAvgTicksPerSecRefreshTime;
@@ -123,7 +135,8 @@ namespace DLS.Graphics
 				DrawHeader("SIMULATION:");
 				bool pauseSim = MenuHelper.LabeledOptionsWheel(simStatusLabel, labelCol, labelPosCurr, entrySize, ID_SimStatus, SimulationStatusOptions, settingFieldSize.x, true) == 1;
 				AddSpacing();
-				InputFieldState freqState = MenuHelper.LabeledInputField("Clock speed (Hz or MAX)", labelCol, labelPosCurr, entrySize, ID_SimFrequencyField, clockInputValidator, settingFieldSize.x, true);
+				int clockScope = DrawNextWheel("Clock speed for", ClockScopeOptions, ID_SimClockScope);
+				MenuHelper.LabeledInputField("Clock speed (Hz or MAX)", labelCol, labelPosCurr, entrySize, ID_SimFrequencyField, clockInputValidator, settingFieldSize.x, true);
 				AddSpacing();
 				// Draw current simulation speed
 				Vector2 tickLabelRight = MenuHelper.DrawLabelSectionOfLabelInputPair(labelPosCurr, entrySize, "Clock speed now (Hz)", labelCol * 0.75f, true);
@@ -139,7 +152,7 @@ namespace DLS.Graphics
 				MenuHelper.DrawReservedMenuPanel(panelID, menuBounds);
 
 				// ---- Handle changes ----
-				int targetSimTicksPerSecond = TargetFromClockText(project, freqState.text);
+				int targetSimTicksPerSecond = HandleClockSpeed(project, clockScope);
 				if (project.targetTicksPerSecond != targetSimTicksPerSecond || project.simPaused != pauseSim) lastSimTickRateSetTime = Time.time;
 
 				// Assign changes immediately so can see them take effect in background
@@ -149,6 +162,7 @@ namespace DLS.Graphics
 				project.description.Prefs_Snapping = snappingMode;
 				project.description.Prefs_StraightWires = straightWireMode;
 				project.description.Prefs_SimTargetStepsPerSecond = targetSimTicksPerSecond;
+				project.description.Prefs_SimOwnClockSpeed = clockScope == ClockScope_ThisProject;
 				project.description.Prefs_SimPaused = pauseSim;
 
 				// Cancel / Confirm
@@ -161,6 +175,7 @@ namespace DLS.Graphics
 				else if (result == MenuHelper.CancelConfirmResult.Confirm)
 				{
 					// Save changes
+					SaveSharedClockSpeed(clockScope);
 					project.UpdateAndSaveProjectDescription(project.description);
 					UIDrawer.SetActiveMenu(UIDrawer.MenuType.None);
 				}
@@ -234,7 +249,18 @@ namespace DLS.Graphics
 				true) == 1;
 			Step(ref right);
 
-			InputFieldState targetSpeed = MenuHelper.LabeledInputField(
+			int clockScope = MenuHelper.LabeledOptionsWheel(
+				"Speed for",
+				labelCol,
+				right,
+				mobileEntrySize,
+				ID_SimClockScope,
+				ClockScopeOptions,
+				fieldWidth,
+				true);
+			Step(ref right);
+
+			MenuHelper.LabeledInputField(
 				"Clock Hz or MAX",
 				labelCol,
 				right,
@@ -282,7 +308,7 @@ namespace DLS.Graphics
 				false,
 				Anchor.TopLeft);
 
-			int targetTicks = TargetFromClockText(project, targetSpeed.text);
+			int targetTicks = HandleClockSpeed(project, clockScope);
 
 			if (project.targetTicksPerSecond != targetTicks || project.simPaused != pauseSim)
 				lastSimTickRateSetTime = Time.time;
@@ -293,6 +319,7 @@ namespace DLS.Graphics
 			project.description.Prefs_Snapping = snappingMode;
 			project.description.Prefs_StraightWires = straightWireMode;
 			project.description.Prefs_SimTargetStepsPerSecond = targetTicks;
+			project.description.Prefs_SimOwnClockSpeed = clockScope == ClockScope_ThisProject;
 			project.description.Prefs_SimPaused = pauseSim;
 
 			if (cancel || KeyboardShortcuts.CancelShortcutTriggered)
@@ -302,6 +329,7 @@ namespace DLS.Graphics
 			}
 			else if (apply || KeyboardShortcuts.ConfirmShortcutTriggered)
 			{
+				SaveSharedClockSpeed(clockScope);
 				project.UpdateAndSaveProjectDescription(project.description);
 				UIDrawer.SetActiveMenu(UIDrawer.MenuType.None);
 			}
@@ -350,10 +378,51 @@ namespace DLS.Graphics
 			UI.GetWheelSelectorState(ID_Snapping).index = projDesc.Prefs_Snapping;
 			UI.GetWheelSelectorState(ID_StraightWires).index = projDesc.Prefs_StraightWires;
 			UI.GetWheelSelectorState(ID_SimStatus).index = projDesc.Prefs_SimPaused ? 1 : 0;
+			clockScopeShown = projDesc.Prefs_SimOwnClockSpeed == true ? ClockScope_ThisProject : ClockScope_AllProjects;
+			UI.GetWheelSelectorState(ID_SimClockScope).index = clockScopeShown;
 			// -- Input fields
-			clockTextFromProject = SimulationSpeed.FormatTarget(projDesc.Prefs_SimTargetStepsPerSecond, projDesc.Prefs_SimStepsPerClockTick);
-			clockTargetFromProject = projDesc.Prefs_SimTargetStepsPerSecond;
-			UI.GetInputFieldState(ID_SimFrequencyField).SetText(clockTextFromProject, false);
+			ShowClockSpeed(SimulationSpeed.FormatTarget(projDesc.Prefs_SimTargetStepsPerSecond, projDesc.Prefs_SimStepsPerClockTick), projDesc.Prefs_SimTargetStepsPerSecond);
+		}
+
+		static void ShowClockSpeed(string text, int target)
+		{
+			clockTextFromProject = text;
+			clockTargetFromProject = target;
+			UI.GetInputFieldState(ID_SimFrequencyField).SetText(text, false);
+		}
+
+		// The step rate the project runs at while the menu is open. Switching to "All Projects"
+		// shows the speed set for all projects; switching to "This Project" starts from the
+		// speed the project had of its own, or else from the one it runs at now.
+		static int HandleClockSpeed(Project project, int clockScope)
+		{
+			if (clockScope != clockScopeShown)
+			{
+				clockScopeShown = clockScope;
+				int perTick = project.stepsPerClockTransition;
+
+				if (clockScope == ClockScope_AllProjects)
+				{
+					AppSettings settings = Main.ActiveAppSettings;
+					ShowClockSpeed(SimulationSpeed.FormatShared(settings), SimulationSpeed.SharedTarget(settings, perTick));
+				}
+				else if (originalProjectDesc.Prefs_SimOwnClockSpeed == true)
+				{
+					int own = originalProjectDesc.Prefs_SimTargetStepsPerSecond;
+					ShowClockSpeed(SimulationSpeed.FormatTarget(own, perTick), own);
+				}
+			}
+
+			return TargetFromClockText(project, UI.GetInputFieldState(ID_SimFrequencyField).text);
+		}
+
+		// On confirm, a speed typed in for all projects goes into the app settings.
+		static void SaveSharedClockSpeed(int clockScope)
+		{
+			if (clockScope != ClockScope_AllProjects) return;
+			string text = UI.GetInputFieldState(ID_SimFrequencyField).text;
+			if (text == clockTextFromProject || !SimulationSpeed.TryParseHz(text, out double hz, out bool max)) return;
+			Main.SaveAppSettings(SimulationSpeed.WithShared(Main.ActiveAppSettings, hz, max));
 		}
 
 		public static void HandleKeyboardShortcuts()

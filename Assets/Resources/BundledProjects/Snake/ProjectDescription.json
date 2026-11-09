@@ -12,6 +12,7 @@
   "Prefs_SimPaused": false,
   "Prefs_SimTargetStepsPerSecond": 8000,
   "Prefs_SimStepsPerClockTick": 1,
+  "Prefs_SimOwnClockSpeed": true,
   "AllCustomChipNames":[
     "DffBit",
     "Reg4",

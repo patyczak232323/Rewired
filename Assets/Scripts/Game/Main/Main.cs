@@ -133,12 +133,25 @@ namespace DLS.Game
 		{
 			if (Loader.ProjectExists(projectName)) ActiveProject = LoadProject(projectName);
 			else ActiveProject = CreateProject(projectName);
+			ApplySharedClockSpeed(ActiveProject);
 
 			if (string.IsNullOrEmpty(startupChipName)) startupChipName = ActiveProject.description.StartupChipName ?? string.Empty;
 			ActiveProject.LoadDevChipOrCreateNewIfDoesntExist(startupChipName);
 			ActiveProject.StartSimulation();
 			ActiveProject.audioState = audioState;
 			UIDrawer.SetActiveMenu(UIDrawer.MenuType.None);
+		}
+
+		// Runs the project at the clock speed set for all projects, unless it has its own.
+		static void ApplySharedClockSpeed(Project project)
+		{
+			ProjectDescription before = project.description;
+			ProjectDescription after = SimulationSpeed.ApplyShared(before, ActiveAppSettings);
+			project.description = after;
+			if (before.Prefs_SimOwnClockSpeed != after.Prefs_SimOwnClockSpeed || before.Prefs_SimTargetStepsPerSecond != after.Prefs_SimTargetStepsPerSecond)
+			{
+				project.SaveCurrentProjectDescription();
+			}
 		}
 
 		static Project CreateProject(string projectName)
@@ -151,8 +164,9 @@ namespace DLS.Game
 				CreationTime = DateTime.Now,
 				Prefs_ChipPinNamesDisplayMode = PreferencesMenu.DisplayMode_OnHover,
 				Prefs_MainPinNamesDisplayMode = PreferencesMenu.DisplayMode_OnHover,
-				Prefs_SimTargetStepsPerSecond = 1000,
 				Prefs_SimStepsPerClockTick = 250,
+				Prefs_SimTargetStepsPerSecond = SimulationSpeed.SharedTarget(ActiveAppSettings, 250),
+				Prefs_SimOwnClockSpeed = false,
 				Prefs_SimPaused = false,
 				AllCustomChipNames = Array.Empty<string>(),
 				StarredList = BuiltinCollectionCreator.GetDefaultStarredList().ToList(),

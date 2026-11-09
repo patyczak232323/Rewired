@@ -63,21 +63,69 @@ namespace DLS.Description
 		public static bool TryParse(string text, int stepsPerClockTick, out int targetStepsPerSecond)
 		{
 			targetStepsPerSecond = 0;
+			if (!TryParseHz(text, out double hz, out bool max)) return false;
+			targetStepsPerSecond = TargetFor(hz, max, stepsPerClockTick);
+			return true;
+		}
+
+		// An entry as a clock speed in Hz, or MAX.
+		public static bool TryParseHz(string text, out double hz, out bool max)
+		{
+			hz = 0;
+			max = false;
 			if (string.IsNullOrWhiteSpace(text)) return false;
 			text = text.Trim();
 
 			if (string.Equals(text, UnlimitedText, StringComparison.OrdinalIgnoreCase))
 			{
-				targetStepsPerSecond = Unlimited;
+				max = true;
 				return true;
 			}
 
-			if (!double.TryParse(text.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out double hz)) return false;
-			if (double.IsNaN(hz) || double.IsInfinity(hz) || hz <= 0) return false;
+			if (!double.TryParse(text.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out hz)) return false;
+			return !double.IsNaN(hz) && !double.IsInfinity(hz) && hz > 0;
+		}
 
+		// The target step rate for a clock speed.
+		public static int TargetFor(double hz, bool max, int stepsPerClockTick)
+		{
+			if (max) return Unlimited;
 			double steps = Math.Round(hz * 2.0 * Math.Max(1, stepsPerClockTick));
-			targetStepsPerSecond = (int)Math.Clamp(steps, 1, Unlimited - 1);
-			return true;
+			return (int)Math.Clamp(steps, 1, Unlimited - 1);
+		}
+
+		// ---- One speed for all projects ----
+		//
+		// The app settings hold one clock speed that every project runs at, unless the project
+		// has a speed of its own (the bundled examples do: Snake is a game and needs 4000 Hz).
+		// The project file still stores the step rate it runs at, so older versions open it at
+		// the same speed.
+
+		public const double DefaultSharedHz = 2; // what a new project used to start at
+
+		public static double SharedHz(AppSettings settings) => settings.SimClockHz > 0 ? settings.SimClockHz : DefaultSharedHz;
+
+		public static string FormatShared(AppSettings settings) => settings.SimClockMax ? UnlimitedText : FormatHz(SharedHz(settings));
+
+		public static int SharedTarget(AppSettings settings, int stepsPerClockTick) =>
+			TargetFor(SharedHz(settings), settings.SimClockMax, stepsPerClockTick);
+
+		// Makes the project run at the shared speed unless it has its own. A project saved
+		// before there was a shared speed keeps its own when it differs from the shared one,
+		// so updating never changes how fast a project runs.
+		public static ProjectDescription ApplyShared(ProjectDescription project, AppSettings settings)
+		{
+			int shared = SharedTarget(settings, project.Prefs_SimStepsPerClockTick);
+			project.Prefs_SimOwnClockSpeed ??= project.Prefs_SimTargetStepsPerSecond != shared;
+			if (project.Prefs_SimOwnClockSpeed == false) project.Prefs_SimTargetStepsPerSecond = shared;
+			return project;
+		}
+
+		public static AppSettings WithShared(AppSettings settings, double hz, bool max)
+		{
+			settings.SimClockMax = max;
+			if (!max) settings.SimClockHz = hz;
+			return settings;
 		}
 	}
 }

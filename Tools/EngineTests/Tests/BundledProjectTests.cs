@@ -101,6 +101,7 @@ namespace DLS.Tests
 				// One instruction takes two simulation steps (clock low, clock high).
 				Prefs_SimTargetStepsPerSecond = 8000,
 				Prefs_SimStepsPerClockTick = 1,
+				Prefs_SimOwnClockSpeed = true, // an example runs at its own speed, not the one set for all projects
 				AllCustomChipNames = chips.Select(c => c.Name).ToArray(),
 				StarredList = BuiltinCollectionCreator.GetDefaultStarredList().ToList(),
 				ChipCollections = BuiltinCollectionCreator.CreateDefaultChipCollections()
@@ -162,6 +163,7 @@ namespace DLS.Tests
 			CollectionAssert.AreEqual(project.AllCustomChipNames, shipped.AllCustomChipNames);
 			Assert.AreEqual(project.Prefs_SimTargetStepsPerSecond, shipped.Prefs_SimTargetStepsPerSecond);
 			Assert.AreEqual(project.Prefs_SimStepsPerClockTick, shipped.Prefs_SimStepsPerClockTick);
+			Assert.AreEqual(project.Prefs_SimOwnClockSpeed, shipped.Prefs_SimOwnClockSpeed);
 
 			string[] chipFiles = Directory.GetFiles(Path.Combine(bundledFolder, "Chips"), "*.json");
 			CollectionAssert.AreEquivalent(chips.Select(c => c.Name + ".json"), chipFiles.Select(Path.GetFileName));

@@ -12,6 +12,7 @@
   "Prefs_SimPaused": false,
   "Prefs_SimTargetStepsPerSecond": 20,
   "Prefs_SimStepsPerClockTick": 1,
+  "Prefs_SimOwnClockSpeed": true,
   "AllCustomChipNames":[
     "Not",
     "And",

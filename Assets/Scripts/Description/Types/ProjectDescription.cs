@@ -21,6 +21,9 @@ namespace DLS.Description
 		public bool Prefs_SimPaused;
 		public int Prefs_SimTargetStepsPerSecond;
 		public int Prefs_SimStepsPerClockTick;
+		// True: the project runs at its own speed. False: at the speed set for all projects in
+		// the app settings. Missing (saved by an older version): see SimulationSpeed.ApplyShared.
+		public bool? Prefs_SimOwnClockSpeed;
 
 		// List of all player-created chips (in order of creation -- oldest first)
 		public string[] AllCustomChipNames;
