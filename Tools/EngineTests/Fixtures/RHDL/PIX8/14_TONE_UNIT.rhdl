@@ -1,0 +1,9 @@
+# Tone unit: the buzzer's pitch register. A pitch of 0 is silent; any other
+# pitch plays at half volume.
+chip ToneUnit
+    in D: 8, WE, CLK, RESET
+    out PITCH: 8, VOLUME: 4
+
+    pitch = Register8(Mux2x8(0, D, RESET), Or(WE, RESET), CLK)
+    PITCH = pitch
+    VOLUME = join(Not(IsZero8(pitch)), 0b000)

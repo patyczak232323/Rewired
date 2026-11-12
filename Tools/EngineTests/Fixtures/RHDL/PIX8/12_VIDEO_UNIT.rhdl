@@ -1,0 +1,18 @@
+# Video unit: the pen and the colour register of the screen.
+#   - SET_POS: the pen moves to (X_IN, Y_IN); the screen gets the new position
+#     in the same tick, so PLOT draws there right away
+#   - PLOT: draw the colour register at the pen (WRITE goes to the screen)
+#   - SET_COL: colour register <- COL_IN (RRRGGGBB)
+# Otherwise the screen sees the pen, which is where READ looks.
+chip VideoUnit
+    in X_IN: 8, Y_IN: 8, COL_IN: 8, SET_POS, PLOT, SET_COL, CLK, RESET
+    out X: 8, Y: 8, R: 4, G: 4, B: 4, WRITE
+
+    pen_x = Register8(Mux2x8(0, X_IN, RESET), Or(SET_POS, RESET), CLK)
+    pen_y = Register8(Mux2x8(0, Y_IN, RESET), Or(SET_POS, RESET), CLK)
+    colour = Register8(Mux2x8(0xFF, COL_IN, RESET), Or(SET_COL, RESET), CLK)
+
+    X = Mux2x8(X_IN, pen_x, SET_POS)
+    Y = Mux2x8(Y_IN, pen_y, SET_POS)
+    R, G, B = Rgb332Expand(colour)
+    WRITE = PLOT

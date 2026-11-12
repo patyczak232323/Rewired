@@ -10,7 +10,9 @@
     "CPU8 (Interpreted)": 267.0,
     "CPU8 (Native)": 267.0,
     "Core8 (Interpreted)": 19.2,
-    "Core8 (Native)": 19.2
+    "Core8 (Native)": 19.2,
+    "PIX8 (Interpreted)": 285.2,
+    "PIX8 (Native)": 285.2
   },
   "MaxSignalPropagationsPerStep": {
     "ALU8 random inputs (Reference)": 359.1,
@@ -22,6 +24,8 @@
     "CPU8 (Interpreted)": 286.0,
     "CPU8 (Native)": 286.0,
     "Core8 (Interpreted)": 36.9,
-    "Core8 (Native)": 36.9
+    "Core8 (Native)": 36.9,
+    "PIX8 (Interpreted)": 333.0,
+    "PIX8 (Native)": 333.0
   }
 }

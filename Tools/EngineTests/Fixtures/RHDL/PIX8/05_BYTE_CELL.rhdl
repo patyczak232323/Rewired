@@ -1,0 +1,10 @@
+# One byte of memory: eight D flip-flops that load D on every rising edge of
+# CLK. There is no write enable: a memory gives each byte its own clock, and
+# that clock only ticks when the byte is written (see Ram16x8).
+chip ByteCell
+    in D: 8, CLK
+    out Q: 8
+
+    for i in 0..7
+        Q[i], _ = DffBit(D[i], CLK)
+    end

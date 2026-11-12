@@ -1,0 +1,15 @@
+# Random numbers: a 16-bit linear feedback shift register that takes one step
+# on every rising CLK edge. Each step shifts right; when the bit shifted out is
+# 1, bits 15, 13, 12 and 10 are flipped (taps 0xB400). That runs through all
+# 65535 non-zero states before repeating. RESET loads the seed 0xACE1.
+chip Lfsr16
+    in CLK, RESET
+    out OUT: 8
+
+    out0 = lo[0]
+    next_lo = join(hi[0], lo[1..7])
+    next_hi = join(out0, hi[7], Xor(hi[6], out0), Xor(hi[5], out0), hi[4], Xor(hi[3], out0), hi[2], hi[1])
+
+    lo = Register8(Mux2x8(0xE1, next_lo, RESET), 1, CLK)
+    hi = Register8(Mux2x8(0xAC, next_hi, RESET), 1, CLK)
+    OUT = lo

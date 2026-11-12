@@ -1,0 +1,10 @@
+# A colour byte RRRGGGBB to 4 bits per channel, for the screen. The top bits of
+# each channel are repeated at the bottom, so 111 becomes 1111 (full) and 000
+# stays 0000.
+chip Rgb332Expand
+    in C: 8
+    out R: 4, G: 4, B: 4
+
+    R = join(C[7], C[6], C[5], C[7])
+    G = join(C[4], C[3], C[2], C[4])
+    B = join(C[1], C[0], C[1], C[0])

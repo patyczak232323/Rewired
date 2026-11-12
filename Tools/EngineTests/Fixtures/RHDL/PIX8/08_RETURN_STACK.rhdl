@@ -1,0 +1,49 @@
+# Return stack: 8 return addresses of 11 bits, for CALL and RET.
+#
+# A 3-bit pointer counts the addresses on the stack. PUSH writes D into the
+# slot the pointer shows and counts up; POP counts down. TOP is always the
+# last address pushed (the slot below the pointer), so RET can jump to it in
+# the same instruction. A ninth CALL overwrites the oldest address.
+#
+# The slots are written like RAM: on the falling edge of CLK, with the clock
+# gated so only the slot being written sees it. The pointer moves on the
+# rising edge, like the rest of the processor.
+chip ReturnStack
+    in D_LO: 8, D_HI: 4, PUSH, POP, CLK, RESET
+    out TOP_LO: 8, TOP_HI: 4
+
+    up, _ = Add8(ptr, 0, 1)
+    down, _ = Add8(ptr, 0xFF, 0)
+    ptr = Register8(Mux2x8(0, Mux2x8(up, down, PUSH), RESET), Or(Or(PUSH, POP), RESET), CLK)
+
+    wclk = Not(CLK)
+    w = Dec3(ptr[0], ptr[1], ptr[2], PUSH)
+    c0 = And(wclk, w.Y0)
+    c1 = And(wclk, w.Y1)
+    c2 = And(wclk, w.Y2)
+    c3 = And(wclk, w.Y3)
+    c4 = And(wclk, w.Y4)
+    c5 = And(wclk, w.Y5)
+    c6 = And(wclk, w.Y6)
+    c7 = And(wclk, w.Y7)
+    lo0 = ByteCell(D_LO, c0)
+    lo1 = ByteCell(D_LO, c1)
+    lo2 = ByteCell(D_LO, c2)
+    lo3 = ByteCell(D_LO, c3)
+    lo4 = ByteCell(D_LO, c4)
+    lo5 = ByteCell(D_LO, c5)
+    lo6 = ByteCell(D_LO, c6)
+    lo7 = ByteCell(D_LO, c7)
+    hi0 = ByteCell(D_HI, c0)
+    hi1 = ByteCell(D_HI, c1)
+    hi2 = ByteCell(D_HI, c2)
+    hi3 = ByteCell(D_HI, c3)
+    hi4 = ByteCell(D_HI, c4)
+    hi5 = ByteCell(D_HI, c5)
+    hi6 = ByteCell(D_HI, c6)
+    hi7 = ByteCell(D_HI, c7)
+
+    top = down[0..2]
+    TOP_LO = Mux8x8(lo0, lo1, lo2, lo3, lo4, lo5, lo6, lo7, top)
+    top_hi = Mux8x8(hi0, hi1, hi2, hi3, hi4, hi5, hi6, hi7, top)
+    TOP_HI = top_hi[0..3]

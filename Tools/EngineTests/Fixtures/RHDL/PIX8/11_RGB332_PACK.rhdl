@@ -1,0 +1,7 @@
+# 4 bits per channel back to a colour byte RRRGGGBB: the top three bits of red
+# and green and the top two of blue.
+chip Rgb332Pack
+    in R: 4, G: 4, B: 4
+    out C: 8
+
+    C = join(R[1..3], G[1..3], B[2..3])

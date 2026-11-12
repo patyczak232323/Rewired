@@ -1,0 +1,31 @@
+# 16 x 8-bit RAM with gated clocks.
+#
+# Reading is combinational: a Mux16x8 picks the addressed byte. Writing: WCLK
+# reaches only the byte that is written. A Dec4 selects it from A while WE=1,
+# and an AND lets WCLK through to that byte alone, so the other fifteen see no
+# clock at all. Real chips gate their clocks the same way to save power; in the
+# simulator it saves the work of clocking bytes that do not change.
+#
+# A, D and WE must not change while WCLK is high. Ram256x8 makes sure of that.
+chip Ram16x8
+    in D: 8, A: 4, WE, WCLK
+    out Q: 8
+
+    w = Dec4(A, WE)
+    b0 = ByteCell(D, And(WCLK, w.Y0))
+    b1 = ByteCell(D, And(WCLK, w.Y1))
+    b2 = ByteCell(D, And(WCLK, w.Y2))
+    b3 = ByteCell(D, And(WCLK, w.Y3))
+    b4 = ByteCell(D, And(WCLK, w.Y4))
+    b5 = ByteCell(D, And(WCLK, w.Y5))
+    b6 = ByteCell(D, And(WCLK, w.Y6))
+    b7 = ByteCell(D, And(WCLK, w.Y7))
+    b8 = ByteCell(D, And(WCLK, w.Y8))
+    b9 = ByteCell(D, And(WCLK, w.Y9))
+    b10 = ByteCell(D, And(WCLK, w.Y10))
+    b11 = ByteCell(D, And(WCLK, w.Y11))
+    b12 = ByteCell(D, And(WCLK, w.Y12))
+    b13 = ByteCell(D, And(WCLK, w.Y13))
+    b14 = ByteCell(D, And(WCLK, w.Y14))
+    b15 = ByteCell(D, And(WCLK, w.Y15))
+    Q = Mux16x8(b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, A)

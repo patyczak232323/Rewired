@@ -197,7 +197,8 @@ namespace DLS.Graphics
 		{
 			("Snake", "a game on a pixel screen, played with W A S D"),
 			("CPU8", "an 8-bit CPU with its own ROM and RAM"),
-			("Core8", "an 8-bit processor core built from NAND gates")
+			("Core8", "an 8-bit processor core built from NAND gates"),
+			("PIX8", "an 8-bit computer with a screen and a 3D cube")
 		};
 
 		const int RecentProjectCount = 5;
