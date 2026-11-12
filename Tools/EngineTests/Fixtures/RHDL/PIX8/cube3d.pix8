@@ -1,0 +1,470 @@
+; CUBE 3D for the PIX8 computer: a wireframe cube turning in 3D.
+;
+; Keys: A / D turn it around the vertical axis, W / S around the horizontal
+; one, J changes the colour. Without keys it keeps turning slowly.
+;
+; Each frame: rotate the eight corners with the multiplier (sine table in RAM,
+; fixed point: 127 means 1.0), store their screen positions, draw the twelve
+; edges with a line subroutine (Bresenham), show the frame.
+
+; ---- RAM ----
+SINE  = 0x00        ; 64 values of sin, 0x00..0x3F
+VX    = 0x40        ; screen x of corner 0..7
+VY    = 0x48        ; screen y of corner 0..7
+ANG_A = 0x50        ; angle around the vertical axis (0..63)
+ANG_B = 0x51        ; angle around the horizontal axis
+VA    = 0x52        ; SIZE * cos(a)
+VB    = 0x53        ; SIZE * sin(a)
+YC    = 0x54        ; SIZE * cos(b)
+SB    = 0x55        ; sin(b)
+VP    = 0x56        ; VA + VB
+VM    = 0x57        ; VA - VB
+T1    = 0x58        ; VM * sin(b)
+T2    = 0x59        ; VP * sin(b)
+COLOR = 0x5A
+KEYS_OLD = 0x5B
+
+SIZE   = 17         ; half the edge of the cube, in pixels
+CENTRE = 32
+
+; Corner n: bit 2 set means x = -1, bit 1 y = -1, bit 0 z = -1.
+
+start:
+    LDI R0,    0
+    ST [0], R0
+    LDI R0,   12
+    ST [1], R0
+    LDI R0,   25
+    ST [2], R0
+    LDI R0,   37
+    ST [3], R0
+    LDI R0,   49
+    ST [4], R0
+    LDI R0,   60
+    ST [5], R0
+    LDI R0,   71
+    ST [6], R0
+    LDI R0,   81
+    ST [7], R0
+    LDI R0,   90
+    ST [8], R0
+    LDI R0,   98
+    ST [9], R0
+    LDI R0,  106
+    ST [10], R0
+    LDI R0,  112
+    ST [11], R0
+    LDI R0,  117
+    ST [12], R0
+    LDI R0,  122
+    ST [13], R0
+    LDI R0,  125
+    ST [14], R0
+    LDI R0,  126
+    ST [15], R0
+    LDI R0,  127
+    ST [16], R0
+    LDI R0,  126
+    ST [17], R0
+    LDI R0,  125
+    ST [18], R0
+    LDI R0,  122
+    ST [19], R0
+    LDI R0,  117
+    ST [20], R0
+    LDI R0,  112
+    ST [21], R0
+    LDI R0,  106
+    ST [22], R0
+    LDI R0,   98
+    ST [23], R0
+    LDI R0,   90
+    ST [24], R0
+    LDI R0,   81
+    ST [25], R0
+    LDI R0,   71
+    ST [26], R0
+    LDI R0,   60
+    ST [27], R0
+    LDI R0,   49
+    ST [28], R0
+    LDI R0,   37
+    ST [29], R0
+    LDI R0,   25
+    ST [30], R0
+    LDI R0,   12
+    ST [31], R0
+    LDI R0,    0
+    ST [32], R0
+    LDI R0,  -12
+    ST [33], R0
+    LDI R0,  -25
+    ST [34], R0
+    LDI R0,  -37
+    ST [35], R0
+    LDI R0,  -49
+    ST [36], R0
+    LDI R0,  -60
+    ST [37], R0
+    LDI R0,  -71
+    ST [38], R0
+    LDI R0,  -81
+    ST [39], R0
+    LDI R0,  -90
+    ST [40], R0
+    LDI R0,  -98
+    ST [41], R0
+    LDI R0, -106
+    ST [42], R0
+    LDI R0, -112
+    ST [43], R0
+    LDI R0, -117
+    ST [44], R0
+    LDI R0, -122
+    ST [45], R0
+    LDI R0, -125
+    ST [46], R0
+    LDI R0, -126
+    ST [47], R0
+    LDI R0, -127
+    ST [48], R0
+    LDI R0, -126
+    ST [49], R0
+    LDI R0, -125
+    ST [50], R0
+    LDI R0, -122
+    ST [51], R0
+    LDI R0, -117
+    ST [52], R0
+    LDI R0, -112
+    ST [53], R0
+    LDI R0, -106
+    ST [54], R0
+    LDI R0,  -98
+    ST [55], R0
+    LDI R0,  -90
+    ST [56], R0
+    LDI R0,  -81
+    ST [57], R0
+    LDI R0,  -71
+    ST [58], R0
+    LDI R0,  -60
+    ST [59], R0
+    LDI R0,  -49
+    ST [60], R0
+    LDI R0,  -37
+    ST [61], R0
+    LDI R0,  -25
+    ST [62], R0
+    LDI R0,  -12
+    ST [63], R0
+    LDI R0, 0
+    ST [ANG_A], R0
+    LDI R0, 8
+    ST [ANG_B], R0
+    LDI R0, 0x1F        ; cyan
+    ST [COLOR], R0
+    LDI R0, 0           ; RAM starts with anything in it
+    ST [KEYS_OLD], R0
+
+frame:
+    CALL steer
+    CALL corners
+    CLS
+    LD R0, [COLOR]
+    COL R0
+    CALL edges
+    SHOW
+    JMP frame
+
+; ---- keys: change the angles and the colour ----
+steer:
+    KEYS R6
+    LD R0, [ANG_A]
+    LD R1, [ANG_B]
+    INC R0              ; keep turning slowly
+    MOV R2, R6
+    ANDI R2, 0b0001     ; D
+    JZ no_d
+    ADDI R0, 2
+no_d:
+    MOV R2, R6
+    ANDI R2, 0b0100     ; A
+    JZ no_a
+    SUBI R0, 4
+no_a:
+    MOV R2, R6
+    ANDI R2, 0b0010     ; W
+    JZ no_w
+    ADDI R1, 2
+no_w:
+    MOV R2, R6
+    ANDI R2, 0b1000     ; S
+    JZ no_s
+    SUBI R1, 2
+no_s:
+    ANDI R0, 63
+    ANDI R1, 63
+    ST [ANG_A], R0
+    ST [ANG_B], R1
+    ; J: next colour, once per press
+    LD R2, [KEYS_OLD]
+    ST [KEYS_OLD], R6
+    NOT R2
+    AND R2, R6
+    ANDI R2, 0b10000
+    JZ no_j
+    LD R0, [COLOR]
+    ADDI R0, 0x49
+    ORI R0, 0x24        ; keep it bright
+    ST [COLOR], R0
+    TONEI 60            ; click
+    RET
+no_j:
+    TONEI 0
+    RET
+
+; ---- the eight corners ----
+corners:
+    ; cos(a) = sin(a + 16)
+    LD R5, [ANG_A]
+    MOV R1, R5
+    ADDI R1, 16
+    ANDI R1, 63
+    LDR R1, [R1]
+    LDI R0, SIZE
+    CALL smul
+    ST [VA], R0
+    LDR R1, [R5]
+    LDI R0, SIZE
+    CALL smul
+    ST [VB], R0
+    LD R5, [ANG_B]
+    MOV R1, R5
+    ADDI R1, 16
+    ANDI R1, 63
+    LDR R1, [R1]
+    LDI R0, SIZE
+    CALL smul
+    ST [YC], R0
+    LDR R1, [R5]
+    ST [SB], R1
+    ; VP = VA + VB, VM = VA - VB
+    LD R0, [VA]
+    LD R1, [VB]
+    MOV R2, R0
+    ADD R2, R1
+    ST [VP], R2
+    SUB R0, R1
+    ST [VM], R0
+    ; T1 = VM * sin(b), T2 = VP * sin(b)
+    LD R1, [SB]
+    CALL smul
+    ST [T1], R0
+    LD R0, [VP]
+    LD R1, [SB]
+    CALL smul
+    ST [T2], R0
+
+    ; Around the vertical axis: (x, z) = (+,+) -> x1 = VP,  z1 term = T1
+    ;                                   (+,-) -> x1 = VM,  term = -T2
+    ;                                   (-,+) -> x1 = -VM, term = T2
+    ;                                   (-,-) -> x1 = -VP, term = -T1
+    ; Then around the horizontal axis: y = CENTRE +- YC - term.
+    LD R0, [VP]
+    LD R1, [T1]
+    LDI R7, 0           ; corner 0 (+,+,+) and 2 (+,-,+)
+    CALL pair
+    LD R0, [VM]
+    LD R1, [T2]
+    NOT R1
+    INC R1
+    LDI R7, 1           ; corners 1 and 3 (z = -1)
+    CALL pair
+    LD R0, [VM]
+    NOT R0
+    INC R0
+    LD R1, [T2]
+    LDI R7, 4           ; corners 4 and 6 (x = -1)
+    CALL pair
+    LD R0, [VP]
+    NOT R0
+    INC R0
+    LD R1, [T1]
+    NOT R1
+    INC R1
+    LDI R7, 5           ; corners 5 and 7
+    CALL pair
+    RET
+
+; Stores corners R7 (y = +1) and R7 + 2 (y = -1). R0 = x1, R1 = term.
+pair:
+    ADDI R0, CENTRE
+    LD R2, [YC]
+    LDI R3, CENTRE
+    SUB R3, R1          ; CENTRE - term
+    MOV R4, R3
+    ADD R3, R2          ; y = +1
+    SUB R4, R2          ; y = -1
+    MOV R5, R7
+    ADDI R5, VX
+    STR [R5], R0
+    ADDI R5, 8          ; VY
+    STR [R5], R3
+    ADDI R5, 2          ; corner + 2, VY
+    STR [R5], R4
+    SUBI R5, 8          ; VX
+    STR [R5], R0
+    RET
+
+; ---- signed multiply: R0 <- R0 * R1 / 128 (R1 is a sine: 127 is 1.0) ----
+; Uses R0..R3.
+smul:
+    LDI R2, 0           ; sign of the result
+    ORI R0, 0
+    JNN smul_a
+    NOT R0
+    INC R0
+    XORI R2, 1
+smul_a:
+    ORI R1, 0
+    JNN smul_b
+    NOT R1
+    INC R1
+    XORI R2, 1
+smul_b:
+    MOV R3, R0
+    MULH R3, R1         ; high byte of |R0| x |R1|
+    MUL R0, R1          ; low byte
+    SHL R3              ; product >> 7 = high << 1 | bit 7 of low
+    ANDI R0, 0x80
+    JZ smul_c
+    INC R3
+smul_c:
+    CMPI R2, 0
+    JZ smul_d
+    NOT R3
+    INC R3
+smul_d:
+    MOV R0, R3
+    RET
+
+; ---- the twelve edges ----
+edges:
+    LD R0, [64]
+    LD R1, [72]
+    LD R2, [68]
+    LD R3, [76]
+    CALL line
+    LD R0, [64]
+    LD R1, [72]
+    LD R2, [66]
+    LD R3, [74]
+    CALL line
+    LD R0, [64]
+    LD R1, [72]
+    LD R2, [65]
+    LD R3, [73]
+    CALL line
+    LD R0, [65]
+    LD R1, [73]
+    LD R2, [69]
+    LD R3, [77]
+    CALL line
+    LD R0, [65]
+    LD R1, [73]
+    LD R2, [67]
+    LD R3, [75]
+    CALL line
+    LD R0, [66]
+    LD R1, [74]
+    LD R2, [70]
+    LD R3, [78]
+    CALL line
+    LD R0, [66]
+    LD R1, [74]
+    LD R2, [67]
+    LD R3, [75]
+    CALL line
+    LD R0, [67]
+    LD R1, [75]
+    LD R2, [71]
+    LD R3, [79]
+    CALL line
+    LD R0, [68]
+    LD R1, [76]
+    LD R2, [70]
+    LD R3, [78]
+    CALL line
+    LD R0, [68]
+    LD R1, [76]
+    LD R2, [69]
+    LD R3, [77]
+    CALL line
+    LD R0, [69]
+    LD R1, [77]
+    LD R2, [71]
+    LD R3, [79]
+    CALL line
+    LD R0, [70]
+    LD R1, [78]
+    LD R2, [71]
+    LD R3, [79]
+    CALL line
+    RET
+
+; ---- line from (R0, R1) to (R2, R3) in the colour register (Bresenham) ----
+; Uses all eight registers.
+line:
+    MOV R4, R2
+    SUB R4, R0          ; dx = x1 - x0
+    LDI R6, 1           ; sx
+    JNC line_dx
+    NOT R4
+    INC R4
+    LDI R6, -1
+line_dx:
+    MOV R5, R3
+    SUB R5, R1          ; dy = y1 - y0
+    LDI R7, 1           ; sy
+    JNC line_dy
+    NOT R5
+    INC R5
+    LDI R7, -1
+line_dy:
+    CMP R4, R5
+    JC line_ymajor      ; dx < dy
+
+    ; Mostly horizontal: one pixel per x, y moves when the error runs out.
+    MOV R2, R4          ; pixels left after this one
+    MOV R3, R4
+    SHR R3              ; error = dx / 2
+line_x:
+    PLOT R0, R1
+    SUBI R2, 1
+    JC line_done
+    ADD R0, R6
+    SUB R3, R5
+    JNC line_x
+    ADD R3, R4
+    ADD R1, R7
+    JMP line_x
+
+    ; Mostly vertical: the same with x and y swapped.
+line_ymajor:
+    MOV R2, R5
+    MOV R3, R5
+    SHR R3
+line_y:
+    PLOT R0, R1
+    SUBI R2, 1
+    JC line_done
+    ADD R1, R7
+    SUB R3, R4
+    JNC line_y
+    ADD R3, R5
+    ADD R0, R6
+    JMP line_y
+
+line_done:
+    RET

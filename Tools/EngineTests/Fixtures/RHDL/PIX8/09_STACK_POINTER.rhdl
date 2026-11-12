@@ -1,0 +1,14 @@
+# Stack pointer for PUSH and POP. The stack lives at the top of RAM and grows
+# down: SP starts at 0 after RESET, so the first PUSH writes RAM[0xFF].
+#   - PUSH: ADDR = SP - 1 (where the byte goes), then SP <- SP - 1
+#   - POP:  ADDR = SP (the byte to read), then SP <- SP + 1
+chip StackPointer
+    in PUSH, POP, CLK, RESET
+    out SP: 8, ADDR: 8
+
+    up, _ = Add8(sp, 0, 1)
+    down, _ = Add8(sp, 0xFF, 0)
+    sp = Register8(Mux2x8(0, Mux2x8(down, up, PUSH), RESET), Or(Or(PUSH, POP), RESET), CLK)
+
+    SP = sp
+    ADDR = Mux2x8(down, sp, PUSH)

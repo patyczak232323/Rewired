@@ -1,0 +1,88 @@
+# PIX8: 8-bit single-cycle processor with a screen, keys, sound, subroutines
+# and a hardware multiplier. The instructions are in README.md.
+#
+#   - 8 registers R0..R7, flags Z, N and C
+#   - 11-bit program counter, program in ProgramRom (2048 words of 16 bits)
+#   - 256 bytes of RAM, read combinationally, written on the clock edge; the
+#     data stack (PUSH, POP) is at the top of it
+#   - a return stack of 8 addresses for CALL and RET
+#   - every instruction takes one rising CLK edge
+#
+# The screen is outside the processor: X, Y, R, G, B, PLOT, SHOW and CLS go to
+# its pins, and the colour it shows at (X, Y) comes back on SCREEN_R/G/B.
+chip Pix8
+    in CLK, RESET, KEYS: 8, SCREEN_R: 4, SCREEN_G: 4, SCREEN_B: 4
+    out X: 8, Y: 8, R: 4, G: 4, B: 4, PLOT, SHOW, CLS, PITCH: 8, VOLUME: 4
+    out PC_LO: 8, PC_HI: 4, R0: 8, R1: 8, R2: 8, R3: 8, R4: 8, R5: 8, R6: 8, R7: 8
+    out SP: 8, Z, N, C, HALTED
+
+    # Fetch. pc, regs, flags and halted are further down: using them here is
+    # the feedback loop of the processor.
+    rom = ProgramRom(pc.LO, pc.HI)
+    hi = rom.INSTR_HI
+    lo = rom.INSTR_LO
+    wire rd: 4 = hi[0..2]
+    wire rs: 4 = lo[5..7]
+
+    # Decode.
+    cu = ControlUnit(hi, lo, flags.Z, flags.N, flags.C)
+    running = Not(halted)
+
+    # Registers: port A reads Rd, port B reads Rs.
+    regs = RegisterFile(write_back, rd, And(cu.REG_WE, running), rd, rs, CLK, RESET)
+
+    # ALU: input B is Rs or the immediate byte.
+    alu = Alu(regs.A, Mux2x8(lo, regs.B, cu.B_IMM), cu.FN, flags.C)
+    alu_on = And(cu.ALU_EN, running)
+    flags = Flags(alu.Z, alu.N, alu.C, And(alu_on, alu.UPD_ZN), And(alu_on, alu.UPD_C), CLK, RESET)
+
+    # Data memory and the data stack.
+    sp = StackPointer(And(cu.PUSH, running), And(cu.POP, running), CLK, RESET)
+    address = Mux4x8(lo, regs.B, regs.A, sp.ADDR, cu.ADDR_SEL)
+    data = Mux2x8(regs.B, regs.A, cu.DATA_B)
+    ram = Ram256x8(data, address, And(cu.MEM_WE, running), CLK)
+
+    # Input and output.
+    video = VideoUnit(regs.A, regs.B, Mux2x8(lo, regs.A, cu.COL_IMM), And(cu.SET_POS, running), And(cu.PLOT, running), And(cu.SET_COL, running), CLK, RESET)
+    pixel = Rgb332Pack(SCREEN_R, SCREEN_G, SCREEN_B)
+    random = Lfsr16(CLK, RESET)
+    tone = ToneUnit(Mux2x8(lo, regs.A, cu.TONE_IMM), And(cu.SET_TONE, running), CLK, RESET)
+
+    # Write-back: the ALU, RAM, the screen, the keys or a random byte.
+    write_back = Mux8x8(alu.Y, ram, pixel, KEYS, random, 0, 0, 0, cu.WB)
+
+    # Halt flip-flop: set by HLT, cleared by RESET.
+    halted, _ = DffBit(And(Not(RESET), Or(halted, cu.HALT)), CLK)
+
+    # Next PC: PC + 1, the jump target (addr11) or, for RET, the top of the
+    # return stack. CALL pushes PC + 1 there. HLT keeps the PC on itself.
+    calls = ReturnStack(pc.NEXT_LO, pc.NEXT_HI, And(cu.CALL, running), And(cu.RET, running), CLK, RESET)
+    target_lo = Mux2x8(calls.TOP_LO, lo, cu.RET)
+    target_hi = Mux2x8(calls.TOP_HI, rd, cu.RET)
+    pc = ProgramCounter(target_lo, target_hi[0..3], cu.JUMP, And(running, Not(cu.HALT)), CLK, RESET)
+
+    X = video.X
+    Y = video.Y
+    R = video.R
+    G = video.G
+    B = video.B
+    PLOT = video.WRITE
+    SHOW = And(cu.SHOW, running)
+    CLS = And(cu.CLS, running)
+    PITCH = tone.PITCH
+    VOLUME = tone.VOLUME
+    PC_LO = pc.LO
+    PC_HI = pc.HI
+    R0 = regs.R0
+    R1 = regs.R1
+    R2 = regs.R2
+    R3 = regs.R3
+    R4 = regs.R4
+    R5 = regs.R5
+    R6 = regs.R6
+    R7 = regs.R7
+    SP = sp.SP
+    Z = flags.Z
+    N = flags.N
+    C = flags.C
+    HALTED = halted

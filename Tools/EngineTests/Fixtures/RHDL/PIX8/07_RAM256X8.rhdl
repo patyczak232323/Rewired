@@ -1,0 +1,32 @@
+# 256 x 8-bit RAM: sixteen Ram16x8 banks. The high four address bits choose
+# the bank (Dec4 for writing, Mux16x8 for reading), the low four the byte.
+#
+# Writes happen on the falling edge of CLK, in the middle of the instruction:
+# by then the address, the data and WE have settled, and nothing changes again
+# until the next rising edge. The write clock is NOT CLK, and it only reaches
+# the bank that is written.
+chip Ram256x8
+    in D: 8, A: 8, WE, CLK
+    out Q: 8
+
+    wclk = Not(CLK)
+    word = A[0..3]
+    bank = A[4..7]
+    w = Dec4(bank, WE)
+    b0 = Ram16x8(D, word, 1, And(wclk, w.Y0))
+    b1 = Ram16x8(D, word, 1, And(wclk, w.Y1))
+    b2 = Ram16x8(D, word, 1, And(wclk, w.Y2))
+    b3 = Ram16x8(D, word, 1, And(wclk, w.Y3))
+    b4 = Ram16x8(D, word, 1, And(wclk, w.Y4))
+    b5 = Ram16x8(D, word, 1, And(wclk, w.Y5))
+    b6 = Ram16x8(D, word, 1, And(wclk, w.Y6))
+    b7 = Ram16x8(D, word, 1, And(wclk, w.Y7))
+    b8 = Ram16x8(D, word, 1, And(wclk, w.Y8))
+    b9 = Ram16x8(D, word, 1, And(wclk, w.Y9))
+    b10 = Ram16x8(D, word, 1, And(wclk, w.Y10))
+    b11 = Ram16x8(D, word, 1, And(wclk, w.Y11))
+    b12 = Ram16x8(D, word, 1, And(wclk, w.Y12))
+    b13 = Ram16x8(D, word, 1, And(wclk, w.Y13))
+    b14 = Ram16x8(D, word, 1, And(wclk, w.Y14))
+    b15 = Ram16x8(D, word, 1, And(wclk, w.Y15))
+    Q = Mux16x8(b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, bank)

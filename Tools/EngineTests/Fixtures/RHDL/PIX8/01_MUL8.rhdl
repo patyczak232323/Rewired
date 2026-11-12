@@ -1,0 +1,21 @@
+# 8 x 8 -> 16 bit multiplier, shift and add, the way it is done on paper.
+#
+# Row i is A AND B[i] (AndRow8). Each step adds the next row to what is left of
+# the previous sum: its lowest bit is final (one bit of LO), the other bits and
+# the carry move one place down for the next row. After the last row the eight
+# bits that are left are the high byte.
+chip Mul8
+    in A: 8, B: 8
+    out LO: 8, HI: 8
+
+    p0 = AndRow8(A, B[0])
+    s1, c1 = Add8(join(0b0, p0[1..7]), AndRow8(A, B[1]), 0)
+    s2, c2 = Add8(join(c1, s1[1..7]), AndRow8(A, B[2]), 0)
+    s3, c3 = Add8(join(c2, s2[1..7]), AndRow8(A, B[3]), 0)
+    s4, c4 = Add8(join(c3, s3[1..7]), AndRow8(A, B[4]), 0)
+    s5, c5 = Add8(join(c4, s4[1..7]), AndRow8(A, B[5]), 0)
+    s6, c6 = Add8(join(c5, s5[1..7]), AndRow8(A, B[6]), 0)
+    s7, c7 = Add8(join(c6, s6[1..7]), AndRow8(A, B[7]), 0)
+
+    LO = join(s7[0], s6[0], s5[0], s4[0], s3[0], s2[0], s1[0], p0[0])
+    HI = join(c7, s7[1..7])

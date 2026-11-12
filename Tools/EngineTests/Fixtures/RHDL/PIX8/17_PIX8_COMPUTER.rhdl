@@ -1,0 +1,28 @@
+# PIX8 computer: the processor with its screen, keys, buzzer, clock and reset.
+#
+# Put a program into the ROMs inside ProgramRom (ROM 0 holds 0x000-0x0FF) and
+# run the simulation. Keys: W A S D, J and K; R resets.
+chip Pix8Computer
+    out PC_LO: 8, PC_HI: 4, HALTED
+
+    clk = CLOCK()
+    reset_key = KEY()
+    key_d = KEY()
+    key_w = KEY()
+    key_a = KEY()
+    key_s = KEY()
+    key_j = KEY()
+    key_k = KEY()
+
+    # Registers made of NAND gates start in no particular state, so the
+    # processor is reset for a few steps when the simulation starts.
+    power_on = PULSE(1)
+
+    keys = join(0b00, key_k, key_j, key_s, key_a, key_w, key_d)
+    cpu = Pix8(clk, Or(reset_key, power_on), keys, screen.R_OUT, screen.G_OUT, screen.B_OUT)
+    screen = RGB_DISPLAY_64(cpu.X, cpu.Y, cpu.R, cpu.G, cpu.B, cpu.CLS, cpu.PLOT, cpu.SHOW, clk)
+    BUZZER(cpu.PITCH, cpu.VOLUME)
+
+    PC_LO = cpu.PC_LO
+    PC_HI = cpu.PC_HI
+    HALTED = cpu.HALTED

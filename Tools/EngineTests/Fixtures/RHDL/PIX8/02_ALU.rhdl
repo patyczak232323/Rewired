@@ -1,0 +1,54 @@
+# 8-bit ALU with 16 functions (FN):
+#
+#  0 MOV  B            4 SBC  A - B - C     8 CMP  A - B        12 INC  A + 1
+#  1 ADD  A + B        5 AND  A AND B       9 NOT  NOT A        13 DEC  A - 1
+#  2 ADC  A + B + C    6 OR   A OR B       10 SHL  A << 1       14 MUL  low byte of A x B
+#  3 SUB  A - B        7 XOR  A XOR B      11 SHR  A >> 1       15 MULH high byte of A x B
+#
+# One adder does every addition and subtraction: subtracting is adding NOT B
+# and 1 (SUB inverts B through XOR gates). INC and DEC use the constant 1 for B.
+# C is the carry, or the borrow after a subtraction, or the bit shifted out.
+#
+# The ALU also says which flags its function sets: Z and N for everything but
+# MOV (UPD_ZN), C for the arithmetic and the shifts (UPD_C).
+chip Alu
+    in A: 8, B: 8, FN: 4, CF
+    out Y: 8, Z, N, C, UPD_ZN, UPD_C
+
+    f = Dec4(FN, 1)
+
+    # Adder input B: the constant 1 for INC and DEC, inverted for a subtraction.
+    b_src = Mux2x8(0x01, B, Or(f.Y12, f.Y13))
+    sub = Or4(f.Y3, f.Y4, f.Y8, f.Y13)
+    plain_sub = Or(Or(f.Y3, f.Y8), f.Y13)
+    cin = Or(plain_sub, Or(And(f.Y2, CF), And(f.Y4, Not(CF))))
+
+    wire b_in: 8
+    wire and_ab: 8
+    wire or_ab: 8
+    wire xor_ab: 8
+    wire not_a: 8
+    for i in 0..7
+        b_in[i] = Xor(b_src[i], sub)
+        and_ab[i] = And(A[i], B[i])
+        or_ab[i] = Or(A[i], B[i])
+        xor_ab[i] = Xor(A[i], B[i])
+        not_a[i] = Not(A[i])
+    end
+
+    total, carry = Add8(A, b_in, cin)
+    product = Mul8(A, B)
+    shl = join(A[0..6], 0b0)
+    shr = join(0b0, A[1..7])
+
+    Y = Mux16x8(B, total, total, total, total, and_ab, or_ab, xor_ab, total, not_a, shl, shr, total, total, product.LO, product.HI, FN)
+
+    # The adder's carry out is 1 when there was no borrow, so a subtraction inverts it.
+    arith_c = Xor(carry, sub)
+    C = Mux(A[7], Mux(A[0], arith_c, f.Y11), f.Y10)
+    Z = IsZero8(Y)
+    N = Y[7]
+
+    arith = Or4(Or4(f.Y1, f.Y2, f.Y3, f.Y4), f.Y8, f.Y12, f.Y13)
+    UPD_C = Or(arith, Or(f.Y10, f.Y11))
+    UPD_ZN = Not(f.Y0)

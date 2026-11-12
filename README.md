@@ -54,11 +54,12 @@ The app checks for new releases on startup and can update itself on Windows, Lin
 
 ## Example projects
 
-Three projects get installed the first time you start Rewired. All of them are NAND gates all the way down.
+Four projects get installed the first time you start Rewired. All of them are NAND gates all the way down.
 
 - **Snake**: a small processor (PIX6) driving the 64×64 screen. Open it, press run, use W A S D.
 - **CPU8**: an 8-bit single-cycle CPU with its own ROM and RAM.
 - **Core8**: an 8-bit processor core.
+- **PIX8**: an 8-bit computer built part by part (ALU with a multiplier, RAM, stack, subroutines, screen, keys, sound), running a 3D cube you turn with W A S D. The parts and the instruction set are in `Tools/EngineTests/Fixtures/RHDL/PIX8`.
 
 ## RHDL
 

@@ -124,6 +124,7 @@ namespace DLS.Benchmarks
 		[TestCase("Snake", 12000)]
 		[TestCase("CPU8", 600)]
 		[TestCase("Core8", 12000)]
+		[TestCase("PIX8", 6000)]
 		public void BundledProject(string project, int steps)
 		{
 			string folder = Path.Combine(UnityEngine.Application.dataPath, "Resources", "BundledProjects", project);

@@ -1,0 +1,72 @@
+# Control unit: turns an instruction into the control lines of the datapath.
+# A Dec5 gives one line per opcode (bits 15-11, which are bits 7-3 of
+# INSTR_HI); each control line is an OR of the opcodes that need it. Two more
+# decoders split the system instructions (op 0) and the ALU functions (op 1)
+# by the low bits of INSTR_LO.
+#
+#  0 system   8 CMPI    16 POS    24 JMP
+#  1 ALU      9 LD      17 READ   25 JZ
+#  2 LDI     10 ST      18 COL    26 JNZ
+#  3 ADDI    11 LDR     19 COLI   27 JC
+#  4 SUBI    12 STR     20 KEYS   28 JNC
+#  5 ANDI    13 PUSH    21 RND    29 JN
+#  6 ORI     14 POP     22 TONE   30 JNN
+#  7 XORI    15 PLOT    23 TONEI  31 CALL
+#
+# System (op 0, low byte): 0 NOP, 1 HLT, 2 RET, 3 SHOW, 4 CLS.
+chip ControlUnit
+    in INSTR_HI: 8, INSTR_LO: 8, ZF, NF, CF
+    out ALU_EN, B_IMM, FN: 4, REG_WE, WB: 4, MEM_WE, ADDR_SEL: 4, DATA_B, PUSH, POP
+    out SET_POS, PLOT, SET_COL, COL_IMM, SET_TONE, TONE_IMM, SHOW, CLS, CALL, RET, JUMP, HALT
+
+    op = Dec5(INSTR_HI[3], INSTR_HI[4], INSTR_HI[5], INSTR_HI[6], INSTR_HI[7])
+    sys = Dec3(INSTR_LO[0], INSTR_LO[1], INSTR_LO[2], op.Y0)
+    alu_fn = Dec4(INSTR_LO[0..3], op.Y1)
+
+    # ALU instructions: op 1 takes the function from the instruction, the
+    # immediate ones (LDI ... CMPI) have it built in: LDI MOV 0, ADDI ADD 1,
+    # SUBI SUB 3, ANDI AND 5, ORI OR 6, XORI XOR 7, CMPI CMP 8.
+    imm_alu = Or4(Or(op.Y2, op.Y3), Or(op.Y4, op.Y5), Or(op.Y6, op.Y7), op.Y8)
+    ALU_EN = Or(op.Y1, imm_alu)
+    B_IMM = imm_alu
+    imm_fn = join(op.Y8, Or(Or(op.Y5, op.Y6), op.Y7), Or(Or(op.Y4, op.Y6), op.Y7), Or4(op.Y3, op.Y4, op.Y5, op.Y7))
+    fn = Mux2x8(INSTR_LO, imm_fn, op.Y1)
+    FN = fn[0..3]
+
+    # Register write: every ALU instruction but CMP and CMPI, the loads, POP and
+    # the inputs (READ, KEYS, RND).
+    alu_writes = Or(And(op.Y1, Not(alu_fn.Y8)), Or4(Or(op.Y2, op.Y3), Or(op.Y4, op.Y5), Or(op.Y6, op.Y7), 0))
+    REG_WE = Or4(alu_writes, Or4(op.Y9, op.Y11, op.Y14, op.Y17), op.Y20, op.Y21)
+
+    # Write-back source: 0 ALU, 1 RAM (LD, LDR, POP), 2 screen (READ), 3 keys, 4 random.
+    from_ram = Or(Or(op.Y9, op.Y11), op.Y14)
+    WB = join(op.Y21, Or(op.Y17, op.Y20), Or(from_ram, op.Y20))
+
+    # RAM: written by ST, STR and PUSH. Address: 0 the immediate byte (LD, ST),
+    # 1 Rs (LDR), 2 Rd (STR), 3 the stack pointer (PUSH, POP). Data: Rs for STR,
+    # Rd for ST and PUSH.
+    PUSH = op.Y13
+    POP = op.Y14
+    stack = Or(op.Y13, op.Y14)
+    MEM_WE = Or(Or(op.Y10, op.Y12), op.Y13)
+    ADDR_SEL = join(Or(op.Y12, stack), Or(op.Y11, stack))
+    DATA_B = op.Y12
+
+    # Screen and buzzer.
+    PLOT = op.Y15
+    SET_POS = Or(op.Y15, op.Y16)
+    SET_COL = Or(op.Y18, op.Y19)
+    COL_IMM = op.Y19
+    SET_TONE = Or(op.Y22, op.Y23)
+    TONE_IMM = op.Y23
+    SHOW = sys.Y3
+    CLS = sys.Y4
+
+    # Jumps, CALL and RET.
+    taken_z = Or(And(op.Y25, ZF), And(op.Y26, Not(ZF)))
+    taken_c = Or(And(op.Y27, CF), And(op.Y28, Not(CF)))
+    taken_n = Or(And(op.Y29, NF), And(op.Y30, Not(NF)))
+    CALL = op.Y31
+    RET = sys.Y2
+    JUMP = Or4(op.Y24, op.Y31, sys.Y2, Or(taken_z, Or(taken_c, taken_n)))
+    HALT = sys.Y1

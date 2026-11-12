@@ -1,0 +1,8 @@
+# One row of the multiplier: every bit of A AND the single bit S.
+chip AndRow8
+    in A: 8, S
+    out Y: 8
+
+    for i in 0..7
+        Y[i] = And(A[i], S)
+    end
